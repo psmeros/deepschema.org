@@ -52,8 +52,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class TaxonomyProcessor implements EntityDocumentProcessor {
 
-	static final String OUTPUT_FILE_NAME = "taxonomy-example.txt.gz";	
-	final OutputStream outputStream;
+	final OutputStream extractedClasses;
 
 	/**
 	 * Runs the example program.
@@ -77,7 +76,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public TaxonomyProcessor() throws IOException {
 
 		// The (compressed) file we write to.
-		this.outputStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream(OUTPUT_FILE_NAME)));
+		this.extractedClasses = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.gz")));
 	}
 
 	@Override
@@ -88,26 +87,20 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 								
 				//subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
 				if ("P279".equals(sg.getProperty().getId())) {
-					this.outputStream.write((sg.getSubject().getIri()+"\n").getBytes());
+					this.extractedClasses.write((sg.getSubject().getIri()+"\n").getBytes());
 					for (Statement s : sg.getStatements()) {
 						ItemIdValue value = (ItemIdValue) s.getValue();
 						if (value != null)
-							this.outputStream.write((value.getIri()+"\n").getBytes()); 
+							this.extractedClasses.write((value.getIri()+"\n").getBytes()); 
 					}
 				}
 
+				//instanceOf(I, C) => Class(C) #RDFS
 				if ("P31".equals(sg.getProperty().getId())) {
-					for (Statement s : sg.getStatements()) {
-							
-						//instanceOf(I, C) => Class(C) #RDFS
+					for (Statement s : sg.getStatements()) {			
 						ItemIdValue value = (ItemIdValue) s.getValue();
 						if (value != null)
-							this.outputStream.write((value.getIri()+"\n").getBytes());
-							
-						//instanceOf(C, Wikimedia category) \/ instanceOf(C, taxon) => Class(C) #sergestratan
-						if("Q4167836".equals(value.getId()) || "Q16521".equals(value.getId())){
-							this.outputStream.write((sg.getSubject().getIri()+"\n").getBytes());
-						}
+							this.extractedClasses.write((value.getIri()+"\n").getBytes());
 					}
 				}
 			}				
@@ -130,7 +123,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 * @throws IOException (if there was a problem closing the output)
 	 */
 	public void close() throws IOException {
-		this.outputStream.close();
+		this.extractedClasses.close();
 	}
 
 }
