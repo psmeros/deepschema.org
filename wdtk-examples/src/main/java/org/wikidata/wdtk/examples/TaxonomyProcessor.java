@@ -25,20 +25,18 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
-import org.wikidata.wdtk.datamodel.helpers.Datamodel;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
 import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
+import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
 import org.wikidata.wdtk.datamodel.interfaces.PropertyDocument;
-import org.wikidata.wdtk.datamodel.interfaces.PropertyIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
-import org.wikidata.wdtk.datamodel.interfaces.Value;
-import org.wikidata.wdtk.datamodel.interfaces.ValueSnak;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 
@@ -52,7 +50,17 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class TaxonomyProcessor implements EntityDocumentProcessor {
 
-	final OutputStream extractedClasses;
+	final OutputStream classesStream;
+	final OutputStream jsonStream;
+	
+	public enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTCLASSES}
+	public static Operation operation;
+	
+	Set <String> classes;
+
+	final DatamodelConverter datamodelConverter;
+	final JsonSerializer jsonSerializer;
+
 
 	/**
 	 * Runs the example program.
@@ -64,7 +72,11 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		ExampleHelpers.configureLogging();
 
 		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor();
+		operation = Operation.FINDCLASSES;
 		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
+		operation = Operation.EXTRACTJSON;
+		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
+		
 		jsonTaxonomyProcessor.close();
 	}
 
@@ -76,22 +88,39 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public TaxonomyProcessor() throws IOException {
 
 		// The (compressed) file we write to.
-		this.extractedClasses = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.gz")));
+		this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.gz")));
+		this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
+		this.classes = new HashSet<>();
+
+		//DataModel
+		this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
+		// Do not copy references.
+		this.datamodelConverter.setOptionDeepCopyReferences(false);
+		// Only copy English labels, descriptions, and aliases.
+		this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
+		// Copy statements of all the properties.
+		this.datamodelConverter.setOptionPropertyFilter(null);
+		// Do not copy sitelinks.
+		this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
+		
+		this.jsonSerializer = new JsonSerializer(jsonStream);
+		this.jsonSerializer.open();
 	}
 
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
-		try {
-		
+		if (operation == Operation.FINDCLASSES)
+		{
 			for (StatementGroup sg : itemDocument.getStatementGroups()) {
-								
+				
 				//subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
 				if ("P279".equals(sg.getProperty().getId())) {
-					this.extractedClasses.write((sg.getSubject().getIri()+"\n").getBytes());
+					this.classes.add(sg.getSubject().getId());
+					
 					for (Statement s : sg.getStatements()) {
 						ItemIdValue value = (ItemIdValue) s.getValue();
 						if (value != null)
-							this.extractedClasses.write((value.getIri()+"\n").getBytes()); 
+							this.classes.add(value.getId());					 
 					}
 				}
 
@@ -100,14 +129,34 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 					for (Statement s : sg.getStatements()) {			
 						ItemIdValue value = (ItemIdValue) s.getValue();
 						if (value != null)
-							this.extractedClasses.write((value.getIri()+"\n").getBytes());
+							this.classes.add(value.getId());
 					}
 				}
-			}				
-		} catch (IOException e) {
-			e.printStackTrace();
+			}			
 		}
-		
+		else {
+			if(classes.contains(itemDocument.getEntityId().getId())) {				
+				for (Entry <String, MonolingualTextValue> label : itemDocument.getLabels().entrySet()) {
+					if (label.getKey().contains("en") || label.getKey().equals("gb") || label.getKey().equals("us")) {
+						if(!label.getValue().getText().toLowerCase().startsWith("category")) {
+							if (operation == Operation.EXTRACTCLASSES){
+								try {
+									this.classesStream.write((itemDocument.getEntityId()+"\n").getBytes());
+								} catch (IOException e) {
+									e.printStackTrace();
+								}								
+							}
+							else if (operation == Operation.EXTRACTJSON) {
+								this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+							}
+						}
+					}
+						
+				}
+				
+			}
+			
+		}		
 	}
 
 	@Override
@@ -115,7 +164,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		// we do not serialize any properties
 	}
 
-
+	
 	/**
 	 * Closes the output. Should be called after the taxonomy serialization was
 	 * finished.
@@ -123,7 +172,8 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 * @throws IOException (if there was a problem closing the output)
 	 */
 	public void close() throws IOException {
-		this.extractedClasses.close();
+		this.classesStream.close();
+		this.jsonStream.close();
 	}
 
 }
