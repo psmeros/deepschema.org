@@ -31,6 +31,7 @@ import java.util.Set;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
+import org.wikidata.wdtk.datamodel.interfaces.EntityIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
 import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
@@ -50,8 +51,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class TaxonomyProcessor implements EntityDocumentProcessor {
 
-	final OutputStream classesStream;
-	final OutputStream jsonStream;
+	final OutputStream classesStream, subClassesStream, jsonStream;
 	
 	public enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTCLASSES}
 	public static Operation operation;
@@ -74,7 +74,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor();
 		operation = Operation.FINDCLASSES;
 		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
-		operation = Operation.EXTRACTJSON;
+		operation = Operation.EXTRACTCLASSES;
 		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
 		
 		jsonTaxonomyProcessor.close();
@@ -88,7 +88,8 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public TaxonomyProcessor() throws IOException {
 
 		// The (compressed) file we write to.
-		this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.gz")));
+		this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.csv.gz")));
+		this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.csv.gz")));
 		this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
 		this.classes = new HashSet<>();
 
@@ -140,8 +141,20 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 					if (label.getKey().contains("en") || label.getKey().equals("gb") || label.getKey().equals("us")) {
 						if(!label.getValue().getText().toLowerCase().startsWith("category")) {
 							if (operation == Operation.EXTRACTCLASSES){
-								try {
-									this.classesStream.write((itemDocument.getEntityId()+"\n").getBytes());
+								try {									
+									this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
+
+									for (StatementGroup sg : itemDocument.getStatementGroups()) {
+										
+										if ("P279".equals(sg.getProperty().getId())) {	
+											for (Statement s : sg.getStatements()) {
+												ItemIdValue value = (ItemIdValue) s.getValue();
+												if (value != null)
+													this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
+											}
+										}
+									}
+									
 								} catch (IOException e) {
 									e.printStackTrace();
 								}								
@@ -149,6 +162,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 							else if (operation == Operation.EXTRACTJSON) {
 								this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 							}
+							break;
 						}
 					}
 						
@@ -173,6 +187,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 */
 	public void close() throws IOException {
 		this.classesStream.close();
+		this.subClassesStream.close();
 		this.jsonStream.close();
 	}
 
