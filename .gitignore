@@ -1,0 +1,5 @@
+.*
+!.gitignore
+project/
+target/
+bin/
