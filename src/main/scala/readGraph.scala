@@ -4,12 +4,12 @@ import org.apache.spark.SparkConf
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
-object visualize {
+object readGraph {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local")
     val sc = new SparkContext(conf)
 
-    //Requires 2 arguments
+    //WARNING: Requires 2 arguments
     val nodesFile = sc.textFile(args(0));
     val edgesFile = sc.textFile(args(1));
     
