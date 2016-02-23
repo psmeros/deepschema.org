@@ -31,7 +31,6 @@ import java.util.Set;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
-import org.wikidata.wdtk.datamodel.interfaces.EntityIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
 import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
@@ -112,58 +111,57 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public void processItemDocument(ItemDocument itemDocument) {
 		if (operation == Operation.FINDCLASSES)
 		{
-			for (StatementGroup sg : itemDocument.getStatementGroups()) {
-				
-				//subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
-				if ("P279".equals(sg.getProperty().getId())) {
-					this.classes.add(sg.getSubject().getId());
-					
-					for (Statement s : sg.getStatements()) {
-						ItemIdValue value = (ItemIdValue) s.getValue();
-						if (value != null)
-							this.classes.add(value.getId());					 
-					}
-				}
+			StatementGroup sg = null;
 
-				//instanceOf(I, C) => Class(C) #RDFS
-				if ("P31".equals(sg.getProperty().getId())) {
-					for (Statement s : sg.getStatements()) {			
-						ItemIdValue value = (ItemIdValue) s.getValue();
-						if (value != null)
-							this.classes.add(value.getId());
-					}
-				}
+			//instanceOf(I, C) => Class(C) #RDFS
+			sg = itemDocument.findStatementGroup("P31");
+			
+			if (sg != null) {
+				for (Statement s : sg.getStatements()) {			
+					ItemIdValue value = (ItemIdValue) s.getValue();
+					if (value != null)
+						this.classes.add(value.getId());
+				}				
+			}
+
+			//subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
+			sg = itemDocument.findStatementGroup("P279");
+
+			if (sg != null) {
+				this.classes.add(sg.getSubject().getId());
+				
+				for (Statement s : sg.getStatements()) {
+					ItemIdValue value = (ItemIdValue) s.getValue();
+					if (value != null)
+						this.classes.add(value.getId());					 
+				}				
 			}			
 		}
 		else {
 			if(classes.contains(itemDocument.getEntityId().getId())) {				
 				for (Entry <String, MonolingualTextValue> label : itemDocument.getLabels().entrySet()) {
 					if (label.getKey().contains("en") || label.getKey().equals("gb") || label.getKey().equals("us")) {
-						if(!label.getValue().getText().toLowerCase().startsWith("category")) {
-							if (operation == Operation.EXTRACTCLASSES){
-								try {									
-									this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
+						if (operation == Operation.EXTRACTCLASSES){
+							try {									
+								this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
 
-									for (StatementGroup sg : itemDocument.getStatementGroups()) {
-										
-										if ("P279".equals(sg.getProperty().getId())) {	
-											for (Statement s : sg.getStatements()) {
-												ItemIdValue value = (ItemIdValue) s.getValue();
-												if (value != null)
-													this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
-											}
-										}
-									}
-									
-								} catch (IOException e) {
-									e.printStackTrace();
-								}								
-							}
-							else if (operation == Operation.EXTRACTJSON) {
-								this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
-							}
-							break;
+								StatementGroup sg = itemDocument.findStatementGroup("P279");
+
+								if (sg != null) {
+									for (Statement s : sg.getStatements()) {
+										ItemIdValue value = (ItemIdValue) s.getValue();
+										if (value != null)
+											this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
+									}	
+								}
+							} catch (IOException e) {
+								e.printStackTrace();
+							}								
 						}
+						else if (operation == Operation.EXTRACTJSON) {
+							this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+						}
+						break;
 					}
 						
 				}
