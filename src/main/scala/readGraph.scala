@@ -17,9 +17,10 @@ object readGraph {
     val nodesRDD: RDD[(VertexId,String)] = nodesFile.map(line => line.split(",")).map(line => (line(0).toString.substring(1).toInt:VertexId, line(1).toString()))
     val edgesRDD: RDD[Edge[String]] = edgesFile.map(line => line.split(",")).map(line => Edge(line(0).toString.substring(1).toInt:VertexId, line(1).toString.substring(1).toInt:VertexId, "subclass"))
     
-    val graph = Graph(nodesRDD, edgesRDD)
+    val graph = Graph(nodesRDD, edgesRDD)    
+    //val graph = Graph.fromEdges(edgesRDD, 1)
     
-    //println(graph.numEdges, graph.numVertices)
+    println(graph.numEdges, graph.numVertices)
     
 
     //outDegree=0 => root class
