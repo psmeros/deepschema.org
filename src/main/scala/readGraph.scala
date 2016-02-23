@@ -3,6 +3,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
+import java.io._
 
 object readGraph {
   def main(args: Array[String]) {
@@ -18,7 +19,17 @@ object readGraph {
     
     val graph = Graph(nodesRDD, edgesRDD)
     
-    graph.triplets.collect.foreach(println)
     //println(graph.numEdges, graph.numVertices)
-  }
+    
+
+    //outDegree=0 => root class
+    println("Root Classes: " + graph.collectNeighbors(EdgeDirection.Out).filter(f => f._2.size==0).count())
+ 
+    
+    //val writer = new PrintWriter(new File("roots.csv" ))
+    //for (root <- graph.collectNeighbors(EdgeDirection.Out).filter(f => f._2.size==0).collect())
+    //  writer.write((root._1 + "\n"))
+    //writer.close()
+    
+    }
 }
