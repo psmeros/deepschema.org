@@ -142,24 +142,28 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 				for (Entry <String, MonolingualTextValue> label : itemDocument.getLabels().entrySet()) {
 					if (label.getKey().contains("en") || label.getKey().equals("gb") || label.getKey().equals("us")) {
 						if (operation == Operation.EXTRACTCLASSES){
-							try {									
-								this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
+							try {
+								//Write classes that are not instances.
+								if(itemDocument.findStatementGroup("P31") == null) {
+									this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
 
-								StatementGroup sg = itemDocument.findStatementGroup("P279");
+									StatementGroup sg = itemDocument.findStatementGroup("P279");
 
-								if (sg != null) {
-									for (Statement s : sg.getStatements()) {
-										ItemIdValue value = (ItemIdValue) s.getValue();
-										if (value != null)
-											this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
-									}	
+									if (sg != null) {
+										for (Statement s : sg.getStatements()) {
+											ItemIdValue value = (ItemIdValue) s.getValue();
+											if (value != null)
+												this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
+										}	
+									}
 								}
 							} catch (IOException e) {
 								e.printStackTrace();
 							}								
 						}
 						else if (operation == Operation.EXTRACTJSON) {
-							this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+							if(itemDocument.findStatementGroup("P31") == null)
+								this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 						}
 						break;
 					}
