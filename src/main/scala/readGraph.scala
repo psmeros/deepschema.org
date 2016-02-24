@@ -17,20 +17,24 @@ object readGraph {
     val nodesRDD: RDD[(VertexId,String)] = nodesFile.map(line => line.split(",")).map(line => (line(0).toString.substring(1).toInt:VertexId, line(1).toString()))
     val edgesRDD: RDD[Edge[String]] = edgesFile.map(line => line.split(",")).map(line => Edge(line(0).toString.substring(1).toInt:VertexId, line(1).toString.substring(1).toInt:VertexId, "subclass"))
     
-    val graph = Graph(nodesRDD, edgesRDD)    
-    //val graph = Graph.fromEdges(edgesRDD, 1)
+    val graph = Graph(nodesRDD, edgesRDD, "defaultLabel")    
+    //val graph = Graph.fromEdges(edgesRDD, "defaultLabel")
     
-    println(graph.numEdges, graph.numVertices)
+    //vertices = classes, edges = subclass relations
+    println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges)
     
+    //vertices with default label = classes that don't have an english label
+    println("Deleted or without english label classes: " + graph.vertices.filter(_._2.equals("defaultLabel")).count())
 
     //outDegree=0 => root class
-    println("Root Classes: " + graph.collectNeighbors(EdgeDirection.Out).filter(f => f._2.size==0).count())
- 
+    val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter(f => f._2.size==0)
     
-    //val writer = new PrintWriter(new File("roots.csv" ))
-    //for (root <- graph.collectNeighbors(EdgeDirection.Out).filter(f => f._2.size==0).collect())
-    //  writer.write((root._1 + "\n"))
-    //writer.close()
+    println("Root Classes: " + rootClasses.count())
+  
+    //write root classes URI and label         
+    val writer = new PrintWriter(new File("roots.csv" ))
+    rootClasses.innerJoin(graph.vertices)((id, array, label) => label).collect().foreach(f => writer.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
+    writer.close()
     
     }
 }
