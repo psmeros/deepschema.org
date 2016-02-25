@@ -17,24 +17,42 @@ object readGraph {
     val nodesRDD: RDD[(VertexId,String)] = nodesFile.map(line => line.split(",")).map(line => (line(0).toString.substring(1).toInt:VertexId, line(1).toString()))
     val edgesRDD: RDD[Edge[String]] = edgesFile.map(line => line.split(",")).map(line => Edge(line(0).toString.substring(1).toInt:VertexId, line(1).toString.substring(1).toInt:VertexId, "subclass"))
     
-    val graph = Graph(nodesRDD, edgesRDD, "defaultLabel")    
-    //val graph = Graph.fromEdges(edgesRDD, "defaultLabel")
+    val graphFromEdges = true
+    
+    val graph = if (graphFromEdges) Graph.fromEdges(edgesRDD, "No Label") else Graph(nodesRDD, edgesRDD, "No Label")
     
     //vertices = classes, edges = subclass relations
     println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges)
     
-    //vertices with default label = classes that don't have an english label
-    println("Deleted or without english label classes: " + graph.vertices.filter(_._2.equals("defaultLabel")).count())
+    if (graphFromEdges)
+    	println("Classes without label: " + graph.vertices.map(f => (f._1, 0)).join(nodesRDD).filter(_._2._2.equals("No Label")).count())
+    else
+    	println("Classes without label: " + graph.vertices.filter(_._2.equals("No Label")).count())
+
 
     //outDegree=0 => root class
-    val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter(f => f._2.size==0)
+    val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter(f => f._2.size==0).map(f => (f._1, 0))
+    //inDegree=0 => leaf class
+    val leafClasses = graph.collectNeighborIds(EdgeDirection.In).filter(f => f._2.size==0).map(f => (f._1, 0)) 
+    //outDegree=0 /\ inDegree=0 => single node
+    val singleNodeClasses = rootClasses.intersection(leafClasses)
+    //outDegree=0 - inDegree=0 => root but not single node
+    val rootNotSingleNodeClasses = rootClasses.subtract(leafClasses)
+    
     
     println("Root Classes: " + rootClasses.count())
+    println("Leaf Classes: " + leafClasses.count())
+    println("Single Node Classes: " + singleNodeClasses.count())    
+    println("Root not Single Node Classes: " + rootNotSingleNodeClasses.count())
   
-    //write root classes URI and label         
-    val writer = new PrintWriter(new File("roots.csv" ))
-    rootClasses.innerJoin(graph.vertices)((id, array, label) => label).collect().foreach(f => writer.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
-    writer.close()
+    //write classes URI and label         
+    val writer1 = new PrintWriter(new File("singleNodeClasses.csv" ))
+    val writer2 = new PrintWriter(new File("rootNotSingleNodeClasses.csv" ))
+    singleNodeClasses.join(nodesRDD).map(f => (f._1, f._2._2)).collect.foreach(f => writer1.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
+    rootNotSingleNodeClasses.join(nodesRDD).map(f => (f._1, f._2._2)).collect.foreach(f => writer2.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
+    writer1.close()
+    writer2.close()
+
     
     }
 }
