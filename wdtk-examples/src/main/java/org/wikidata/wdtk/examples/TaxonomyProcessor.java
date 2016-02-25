@@ -23,9 +23,9 @@ package org.wikidata.wdtk.examples;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
@@ -138,40 +138,39 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 			}			
 		}
 		else {
-			if(classes.contains(itemDocument.getEntityId().getId())) {				
-				for (Entry <String, MonolingualTextValue> label : itemDocument.getLabels().entrySet()) {
-					if (label.getKey().contains("en") || label.getKey().equals("gb") || label.getKey().equals("us")) {
-						if (operation == Operation.EXTRACTCLASSES){
-							try {
-								//Write classes that are not instances.
-								if(itemDocument.findStatementGroup("P31") == null) {
-									this.classesStream.write((itemDocument.getEntityId().getId()+","+label.getValue().getText()+"\n").getBytes());									
+			if(classes.contains(itemDocument.getEntityId().getId())) {
+				if (operation == Operation.EXTRACTCLASSES){
+					try {
 
-									StatementGroup sg = itemDocument.findStatementGroup("P279");
+						//Add english label; if not exists, add another available.
+						String label = itemDocument.findLabel("en");
+						if (label == null) {
+							Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
+							if (otherlabels.isEmpty())
+								label = "No Label";
+							else
+								label = otherlabels.iterator().next().getText();
+						}
 
-									if (sg != null) {
-										for (Statement s : sg.getStatements()) {
-											ItemIdValue value = (ItemIdValue) s.getValue();
-											if (value != null)
-												this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
-										}	
-									}
-								}
-							} catch (IOException e) {
-								e.printStackTrace();
-							}								
+						this.classesStream.write((itemDocument.getEntityId().getId()+","+label+"\n").getBytes());									
+
+						StatementGroup sg = itemDocument.findStatementGroup("P279");
+
+						if (sg != null) {
+							for (Statement s : sg.getStatements()) {
+								ItemIdValue value = (ItemIdValue) s.getValue();
+								if (value != null)
+									this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
+							}	
 						}
-						else if (operation == Operation.EXTRACTJSON) {
-							if(itemDocument.findStatementGroup("P31") == null)
-								this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
-						}
-						break;
-					}
-						
+					} catch (IOException e) {
+						e.printStackTrace();
+					}								
 				}
-				
-			}
-			
+				else if (operation == Operation.EXTRACTJSON) {
+						this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+				}
+			}							
 		}		
 	}
 
