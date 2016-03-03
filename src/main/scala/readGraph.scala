@@ -52,7 +52,12 @@ object readGraph {
     rootNotSingleNodeClasses.join(nodesRDD).map(f => (f._1, f._2._2)).collect.foreach(f => writer2.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
     writer1.close()
     writer2.close()
-
+        
+    val subgraphs = graph.connectedComponents().vertices.join(nodesRDD).leftOuterJoin(rootClasses).map(f => (f._2._1._1, (f._1, f._2._1._2, f._2._2))).groupByKey.collect
+          
+    val metadata = new PrintWriter(new File("metadata.txt" ))
+    subgraphs.foreach{ f => metadata.write("======Graph " + f._1 + "======\n") ; f._2.foreach{ f =>  if (f._3.isEmpty.unary_!) metadata.write(f._2 + "\n")}}
+    metadata.close()
     
     }
 }
