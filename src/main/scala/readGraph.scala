@@ -56,7 +56,12 @@ object readGraph {
     val subgraphs = graph.connectedComponents().vertices.join(nodesRDD).leftOuterJoin(rootClasses).map(f => (f._2._1._1, (f._1, f._2._1._2, f._2._2))).groupByKey.collect
           
     val metadata = new PrintWriter(new File("metadata.txt" ))
-    subgraphs.foreach{ f => metadata.write("======Graph " + f._1 + "======\n") ; f._2.foreach{ f =>  if (f._3.isEmpty.unary_!) metadata.write(f._2 + "\n")}}
+    metadata.write("#Subgraphs: " + subgraphs.length + "\n")
+    subgraphs.foreach{ f => metadata.write("======Graph " + f._1) 
+    var count=0
+    for (f <- f._2) if (f._3.isEmpty.unary_!) count+=1 
+    metadata.write(" (#Roots: " + count + ", #Nodes: "+f._2.size+")======\n")
+    f._2.foreach{ f => if (f._3.isEmpty.unary_!) metadata.write(f._2 + "\n")}}
     metadata.close()
     
     }
