@@ -7,70 +7,76 @@ import java.io._
 
 object readGraph {
   
-  var nodesFile, edgesFile: String = null
+  var verticesFile, edgesFile: String = null
   
-  val conf = new SparkConf().setAppName("Simple Application").setMaster("local")
+  //initialize Spark
+  val conf = new SparkConf().setAppName("readGraph").setMaster("local")
   val sc = new SparkContext(conf)
 
+  //create graph from edges ignoring single node classes
   val graphFromEdges = true
   
-  lazy val nodesRDD: RDD[(VertexId,String)] = sc.textFile(nodesFile).map(line => line.split(",")).map(line => (line(0).toString.substring(1).toInt:VertexId, line(1).toString()))
-  lazy val edgesRDD: RDD[Edge[String]] = sc.textFile(edgesFile).map(line => line.split(",")).map(line => Edge(line(0).toString.substring(1).toInt:VertexId, line(1).toString.substring(1).toInt:VertexId, "subclass"))
+  //read from csv files
+  lazy val verticesRDD = sc.textFile(verticesFile).map(line => line.split(",")).map(line => (line(0).toString.substring(1).toInt:VertexId, line(1).toString()))
+  lazy val edgesRDD = sc.textFile(edgesFile).map(line => line.split(",")).map(line => Edge(line(0).toString.substring(1).toInt:VertexId, line(1).toString.substring(1).toInt:VertexId, "subclass"))
 
-  lazy val graph = if (graphFromEdges) Graph.fromEdges(edgesRDD, "No Label") else Graph(nodesRDD, edgesRDD, "No Label")
+  //create graph
+  lazy val graph = if (graphFromEdges) Graph.fromEdges(edgesRDD, "No Label") else Graph(verticesRDD, edgesRDD, "No Label")
+  
+  //outDegree=0 => root class
+  lazy val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter{case (_, neighbors) => neighbors.size==0}.leftJoin(verticesRDD){case (id, _, label) => (id, label.getOrElse("No Label"))}
+  //inDegree=0 => leaf class
+  lazy val leafClasses = graph.collectNeighborIds(EdgeDirection.In).filter{case (_, neighbors) => neighbors.size==0}.leftJoin(verticesRDD){case (id, _, label) => (id, label.getOrElse("No Label"))} 
   
   def firstLevelStatistics {
 	  //vertices = classes, edges = subclass relations
 	  println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges)
 
+	  //graph from edges doesn't have labeled vertices => join with vertices RDD
 	  if (graphFromEdges)
-		  println("Classes without label: " + graph.vertices.map(f => (f._1, 0)).join(nodesRDD).filter(_._2._2.equals("No Label")).count())
-		  else
-			  println("Classes without label: " + graph.vertices.filter(_._2.equals("No Label")).count())    
+		  println("Classes without label: " + graph.vertices.join(verticesRDD).filter{ case (_, (_, label)) => label.equals("No Label")}.count())
+	  else
+		  println("Classes without label: " + graph.vertices.filter{case (_, label) => label.equals("No Label")}.count())    
   }
   
   def hierarchyStatistics {
-    //outDegree=0 => root class
-    val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter(f => f._2.size==0).map(f => (f._1, 0))
-    //inDegree=0 => leaf class
-    val leafClasses = graph.collectNeighborIds(EdgeDirection.In).filter(f => f._2.size==0).map(f => (f._1, 0)) 
-    //outDegree=0 /\ inDegree=0 => single node
-    val singleNodeClasses = rootClasses.intersection(leafClasses)
-    //outDegree=0 - inDegree=0 => root but not single node
-    val rootNotSingleNodeClasses = rootClasses.subtract(leafClasses)
-        
+    //root /\ leaf => single node
+    val singleNodeClasses = rootClasses.intersection(leafClasses).map{case (_, (id, label)) => (id, label)}
+    //root - leaf => root but not single node
+    val rootNotSingleNodeClasses = rootClasses.subtract(leafClasses).map{case (_, (id, label)) => (id, label)}
+    
+    //print statistics
     println("Root Classes: " + rootClasses.count())
     println("Leaf Classes: " + leafClasses.count())
     println("Single Node Classes: " + singleNodeClasses.count())    
     println("Root not Single Node Classes: " + rootNotSingleNodeClasses.count())
 
-    //write classes URI and label         
+    //write classes to files         
     val writer1 = new PrintWriter(new File("singleNodeClasses.csv" ))
     val writer2 = new PrintWriter(new File("rootNotSingleNodeClasses.csv" ))
-    singleNodeClasses.join(nodesRDD).map(f => (f._1, f._2._2)).collect.foreach(f => writer1.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
-    rootNotSingleNodeClasses.join(nodesRDD).map(f => (f._1, f._2._2)).collect.foreach(f => writer2.write("http://www.wikidata.org/wiki/Q" + f._1 + " , " + f._2 + "\n"))
+    singleNodeClasses.collect.foreach{case (id, label) => writer1.write("http://www.wikidata.org/wiki/Q" + id + " , " + label + "\n")}
+    rootNotSingleNodeClasses.collect.foreach{case (id, label) => writer2.write("http://www.wikidata.org/wiki/Q" + id + " , " + label + "\n")}
     writer1.close()
     writer2.close()
   }
   
   def createSubgraphs {
-    val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter(f => f._2.size==0).map(f => (f._1, 0))
-    val subgraphs = graph.connectedComponents().vertices.join(nodesRDD).leftOuterJoin(rootClasses).map(f => (f._2._1._1, (f._1, f._2._1._2, f._2._2))).groupByKey.collect
-          
+	  //compute subgraphs
+	  val subgraphs = graph.connectedComponents().vertices.join(verticesRDD).leftOuterJoin(rootClasses).map{ case ((id, ((graphId, label), Some((_,isRoot))))) => (graphId, (id, label, true)) ; case ((id, ((graphId, label), None))) => (graphId, (id, label, false))}.groupByKey.collect
+    
+	  //write metadata about subgraphs
     val metadata = new PrintWriter(new File("subgraphs.txt" ))
     metadata.write("#Subgraphs: " + subgraphs.length + "\n")
-    subgraphs.foreach{ f => metadata.write("======Graph " + f._1) 
-    var count=0
-    for (f <- f._2) if (f._3.isEmpty.unary_!) count+=1 
-    metadata.write(" (#Roots: " + count + ", #Nodes: "+f._2.size+")======\n")
-    f._2.foreach{ f => if (f._3.isEmpty.unary_!) metadata.write(f._2 + "\n")}}
+    subgraphs.foreach{ case (graphId, vertices) => 
+    metadata.write("======Graph " + graphId + " (#Roots: " + vertices.count{case (_, _, isRoot) => isRoot} + ", #Classes: "+vertices.size+")======\n")
+    vertices.foreach{ case (_, label, isRoot) => if (isRoot) metadata.write(label + "\n")}}
     metadata.close()
   }
   
   def main(args: Array[String]) {
 
 	  if (args.length == 2) {
-		  nodesFile = args(0)
+		  verticesFile = args(0)
 		  edgesFile = args(1)      
 	   
 		  createSubgraphs
