@@ -153,6 +153,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		else {
 			if(classes.contains(itemDocument.getEntityId().getId())) {
 				if (operation == Operation.EXTRACTCSV){
+					final String separator = "|";
 					try {
 
 						//Add english label; if not exists, add another available.
@@ -167,30 +168,32 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 						StatementGroup sg = null;
 						
-						//find equivalent class from schema.org 
+						//Find equivalent class from schema.org and dbpedia.
+						String schemaOrgClass = "";
+						String dbpediaOrgClass = "";
 						sg = itemDocument.findStatementGroup("P1709");
 
 						if (sg != null) {
 							for (Statement s : sg.getStatements()) {
 								StringValue value = (StringValue) s.getValue();
-								System.out.println(value.getString());
-								if (value != null && value.getString().contains("schema.org"))
-									this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+value.getString()+"\n").getBytes());
-								else
-									this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+"\n").getBytes());									
+								if (value != null)
+									if	(value.getString().contains("dbpedia.org"))
+										dbpediaOrgClass = value.getString();
+									else if (value.getString().contains("schema.org"))
+										schemaOrgClass = value.getString();
 							}	
 						}
-						else
-							this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+"\n").getBytes());									
 						
-						//find subclasses
+						this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+dbpediaOrgClass+separator+schemaOrgClass+"\n").getBytes());									
+						
+						//Find subclass relations.
 						sg = itemDocument.findStatementGroup("P279");
 
 						if (sg != null) {
 							for (Statement s : sg.getStatements()) {
 								ItemIdValue value = (ItemIdValue) s.getValue();
 								if (value != null)
-									this.subClassesStream.write((itemDocument.getEntityId().getId()+","+value.getId()+"\n").getBytes());					 
+									this.subClassesStream.write((itemDocument.getEntityId().getId()+separator+value.getId()+"\n").getBytes());					 
 							}	
 						}
 					} catch (IOException e) {
@@ -206,7 +209,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 	@Override
 	public void processPropertyDocument(PropertyDocument propertyDocument) {
-		// we do not serialize any properties
+		//Do not serialize any properties.
 	}
 
 	/**
