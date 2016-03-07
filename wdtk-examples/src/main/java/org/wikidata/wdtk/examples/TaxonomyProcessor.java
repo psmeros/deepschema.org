@@ -21,7 +21,11 @@ package org.wikidata.wdtk.examples;
  */
 
 import java.io.BufferedOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Collections;
@@ -37,6 +41,7 @@ import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
 import org.wikidata.wdtk.datamodel.interfaces.PropertyDocument;
 import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
+import org.wikidata.wdtk.datamodel.interfaces.StringValue;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 
@@ -50,15 +55,15 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class TaxonomyProcessor implements EntityDocumentProcessor {
 
-	final OutputStream classesStream, subClassesStream, jsonStream;
+	OutputStream classesStream, subClassesStream, jsonStream;
 	
-	public enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTCLASSES}
-	public static Operation operation;
+	enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTCSV}
+	static Operation operation;
 	
 	Set <String> classes;
 
-	final DatamodelConverter datamodelConverter;
-	final JsonSerializer jsonSerializer;
+	DatamodelConverter datamodelConverter;
+	JsonSerializer jsonSerializer;
 
 
 	/**
@@ -70,41 +75,49 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public static void main(String[] args) throws IOException {
 		ExampleHelpers.configureLogging();
 
-		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor();
-		operation = Operation.FINDCLASSES;
-		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
-		operation = Operation.EXTRACTCLASSES;
+		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor(Operation.EXTRACTCSV);
+		//operation = Operation.FINDCLASSES;
+		//ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
+		//jsonTaxonomyProcessor.caching("write");
+
+		jsonTaxonomyProcessor.caching("read");
 		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
 		
 		jsonTaxonomyProcessor.close();
-	}
-
+	}	
+	
 	/**
 	 * Constructor. Opens the file that we want to write to.
 	 *
-	 * @throws IOException (if there is a problem opening the output file)
+	 * @param Operation op
+	 * @throws IOException (if there is a problem opening the output file(s))
 	 */
-	public TaxonomyProcessor() throws IOException {
+	public TaxonomyProcessor(Operation op) throws IOException {
 
-		// The (compressed) file we write to.
-		this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.csv.gz")));
-		this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.csv.gz")));
-		this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
 		this.classes = new HashSet<>();
+		operation = op;
 
-		//DataModel
-		this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
-		// Do not copy references.
-		this.datamodelConverter.setOptionDeepCopyReferences(false);
-		// Only copy English labels, descriptions, and aliases.
-		this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
-		// Copy statements of all the properties.
-		this.datamodelConverter.setOptionPropertyFilter(null);
-		// Do not copy sitelinks.
-		this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
-		
-		this.jsonSerializer = new JsonSerializer(jsonStream);
-		this.jsonSerializer.open();
+		if (operation == Operation.EXTRACTCSV)	{
+			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.csv.gz")));
+			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.csv.gz")));
+		}
+		else if (operation == Operation.EXTRACTJSON) {
+			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
+
+			//DataModel
+			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
+			// Do not copy references.
+			this.datamodelConverter.setOptionDeepCopyReferences(false);
+			// Only copy English labels, descriptions, and aliases.
+			this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
+			// Copy statements of all the properties.
+			this.datamodelConverter.setOptionPropertyFilter(null);
+			// Do not copy sitelinks.
+			this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
+
+			this.jsonSerializer = new JsonSerializer(jsonStream);
+			this.jsonSerializer.open();
+		}
 	}
 
 	@Override
@@ -139,7 +152,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		}
 		else {
 			if(classes.contains(itemDocument.getEntityId().getId())) {
-				if (operation == Operation.EXTRACTCLASSES){
+				if (operation == Operation.EXTRACTCSV){
 					try {
 
 						//Add english label; if not exists, add another available.
@@ -152,9 +165,26 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 								label = otherlabels.iterator().next().getText();
 						}
 
-						this.classesStream.write((itemDocument.getEntityId().getId()+","+label+"\n").getBytes());									
+						StatementGroup sg = null;
+						
+						//find equivalent class from schema.org 
+						sg = itemDocument.findStatementGroup("P1709");
 
-						StatementGroup sg = itemDocument.findStatementGroup("P279");
+						if (sg != null) {
+							for (Statement s : sg.getStatements()) {
+								StringValue value = (StringValue) s.getValue();
+								System.out.println(value.getString());
+								if (value != null && value.getString().contains("schema.org"))
+									this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+value.getString()+"\n").getBytes());
+								else
+									this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+"\n").getBytes());									
+							}	
+						}
+						else
+							this.classesStream.write((itemDocument.getEntityId().getId()+","+label+","+"\n").getBytes());									
+						
+						//find subclasses
+						sg = itemDocument.findStatementGroup("P279");
 
 						if (sg != null) {
 							for (Statement s : sg.getStatements()) {
@@ -179,17 +209,47 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		// we do not serialize any properties
 	}
 
+	/**
+	 * Caches classes to file.
+	 * 
+	 * @param operation: "read" or "write"
+	 */	
+	@SuppressWarnings("unchecked")
+	public void caching(String operation) {
+		final String cacheFile="classes";
+		
+		try {
+			switch (operation) {	
+				case "read" : {
+					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
+					classes = (Set<String>) ((ObjectInputStream) objectInputStream).readObject();
+					objectInputStream.close();
+				}
+				case "write" : {
+					ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
+					objectOutputStream.writeObject(classes);
+					objectOutputStream.flush();
+					objectOutputStream.close();
+				}
+			}
+		} catch (ClassNotFoundException | IOException e) {
+			e.printStackTrace();
+		}
+	}	
 	
 	/**
-	 * Closes the output. Should be called after the taxonomy serialization was
-	 * finished.
+	 * Closes the output. Should be called after the taxonomy serialization was finished.
 	 *
 	 * @throws IOException (if there was a problem closing the output)
 	 */
 	public void close() throws IOException {
-		this.classesStream.close();
-		this.subClassesStream.close();
-		this.jsonStream.close();
+		if(operation == Operation.EXTRACTCSV) {
+			this.classesStream.close();
+			this.subClassesStream.close();
+		}
+		else if (operation == Operation.EXTRACTJSON) {
+			this.jsonStream.close();
+		}
 	}
-
+	
 }
