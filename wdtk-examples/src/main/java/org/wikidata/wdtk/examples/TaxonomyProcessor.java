@@ -57,7 +57,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subClassesStream, jsonStream;
 	
-	enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTCSV}
+	enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTTSV}
 	static Operation operation;
 	
 	Set <String> classes;
@@ -75,7 +75,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public static void main(String[] args) throws IOException {
 		ExampleHelpers.configureLogging();
 
-		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor(Operation.EXTRACTCSV);
+		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor(Operation.EXTRACTTSV);
 		//operation = Operation.FINDCLASSES;
 		//ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
 		//jsonTaxonomyProcessor.caching("write");
@@ -97,9 +97,9 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		this.classes = new HashSet<>();
 		operation = op;
 
-		if (operation == Operation.EXTRACTCSV)	{
-			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.csv.gz")));
-			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.csv.gz")));
+		if (operation == Operation.EXTRACTTSV)	{
+			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
+			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.tsv.gz")));
 		}
 		else if (operation == Operation.EXTRACTJSON) {
 			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
@@ -152,8 +152,8 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		}
 		else {
 			if(classes.contains(itemDocument.getEntityId().getId())) {
-				if (operation == Operation.EXTRACTCSV){
-					final String separator = "|";
+				if (operation == Operation.EXTRACTTSV){
+					final String separator = "\t";
 					try {
 
 						//Add english label; if not exists, add another available.
@@ -246,7 +246,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 * @throws IOException (if there was a problem closing the output)
 	 */
 	public void close() throws IOException {
-		if(operation == Operation.EXTRACTCSV) {
+		if(operation == Operation.EXTRACTTSV) {
 			this.classesStream.close();
 			this.subClassesStream.close();
 		}
