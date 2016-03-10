@@ -63,11 +63,13 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
-	Operation operation = Operation.EXTRACTCLASSES;
-	public Output output = Output.CACHE;
-
 	Map <String, Integer> classes;
+	
+	
+	Operation operation = Operation.EXTRACTALL;
+	public Output output = Output.TSV;
 
+	Boolean findEquivalences = false;
 
 	/**
 	 * Constructor. Opens the file that we want to write to.
@@ -79,8 +81,10 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		this.classes = new HashMap<>();
 
 		if (output == Output.TSV)	{
-			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
-			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.tsv.gz")));
+			if (operation == Operation.EXTRACTCLASSES || operation == Operation.EXTRACTALL)
+				this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
+			if (operation == Operation.EXTRACTSUBCLASSES || operation == Operation.EXTRACTALL)
+				this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.tsv.gz")));
 		}
 		else if (output == Output.JSON) {
 			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
@@ -205,25 +209,27 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 							else
 								label = otherlabels.iterator().next().getText();
 						}
-
-						StatementGroup sg = null;
-
+						
 						//Find equivalent class from schema.org and dbpedia.
-						String schemaOrgClass = "";
-						String dbpediaOrgClass = "";
-						sg = itemDocument.findStatementGroup("P1709");
+						if (findEquivalences) {
+							String schemaOrgClass = "";
+							String dbpediaOrgClass = "";
+							StatementGroup sg = itemDocument.findStatementGroup("P1709");
 
-						if (sg != null) {
-							for (Statement s : sg.getStatements()) {
-								StringValue value = (StringValue) s.getValue();
-								if (value != null)
-									if	(value.getString().contains("dbpedia.org"))
-										dbpediaOrgClass = value.getString();
-									else if (value.getString().contains("schema.org"))
-										schemaOrgClass = value.getString();
-							}	
+							if (sg != null) {
+								for (Statement s : sg.getStatements()) {
+									StringValue value = (StringValue) s.getValue();
+									if (value != null)
+										if	(value.getString().contains("dbpedia.org"))
+											dbpediaOrgClass = value.getString();
+										else if (value.getString().contains("schema.org"))
+											schemaOrgClass = value.getString();
+								}	
+							}
+							this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+classes.get(itemDocument.getEntityId().getId())+separator+dbpediaOrgClass+separator+schemaOrgClass+"\n").getBytes());
 						}
-						this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+dbpediaOrgClass+separator+schemaOrgClass+"\n").getBytes());									
+						else
+							this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+classes.get(itemDocument.getEntityId().getId())+"\n").getBytes());
 					} catch (IOException e) {
 						e.printStackTrace();
 					}	
@@ -269,8 +275,10 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 */
 	public void close() throws IOException {
 		if(output == Output.TSV) {
-			this.classesStream.close();
-			this.subClassesStream.close();
+			if (operation == Operation.EXTRACTCLASSES || operation == Operation.EXTRACTALL)
+				this.classesStream.close();
+			if (operation == Operation.EXTRACTSUBCLASSES || operation == Operation.EXTRACTALL)
+				this.subClassesStream.close();
 		}
 		else if (output == Output.JSON) {
 			this.jsonStream.close();
