@@ -29,8 +29,8 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
@@ -60,7 +60,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTTSV}
 	static Operation operation;
 	
-	Set <String> classes;
+	Map <String, Integer> classes;
 
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
@@ -94,7 +94,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	 */
 	public TaxonomyProcessor(Operation op) throws IOException {
 
-		this.classes = new HashSet<>();
+		this.classes = new HashMap<>();
 		operation = op;
 
 		if (operation == Operation.EXTRACTTSV)	{
@@ -133,7 +133,10 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 				for (Statement s : sg.getStatements()) {			
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null)
-						this.classes.add(value.getId());
+						if(!this.classes.containsKey(value.getId()))
+							this.classes.put(value.getId(), 1);
+						else
+							this.classes.put(value.getId(), this.classes.get(value.getId()) + 1);
 				}				
 			}
 
@@ -141,17 +144,19 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 			sg = itemDocument.findStatementGroup("P279");
 
 			if (sg != null) {
-				this.classes.add(sg.getSubject().getId());
+				if(!this.classes.containsKey(sg.getSubject().getId()))
+					this.classes.put(sg.getSubject().getId(), 0);
 				
 				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null)
-						this.classes.add(value.getId());					 
+						if(!this.classes.containsKey(value.getId()))
+							this.classes.put(value.getId(), 0); 
 				}				
 			}			
 		}
 		else {
-			if(classes.contains(itemDocument.getEntityId().getId())) {
+			if(classes.containsKey(itemDocument.getEntityId().getId())) {
 				if (operation == Operation.EXTRACTTSV){
 					final String separator = "\t";
 					try {
@@ -225,7 +230,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 			switch (operation) {	
 				case "read" : {
 					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-					classes = (Set<String>) ((ObjectInputStream) objectInputStream).readObject();
+					classes = (Map<String, Integer>) ((ObjectInputStream) objectInputStream).readObject();
 					objectInputStream.close();
 				}
 				case "write" : {
