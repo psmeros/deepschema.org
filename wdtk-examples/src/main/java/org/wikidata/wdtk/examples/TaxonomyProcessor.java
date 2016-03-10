@@ -66,7 +66,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	Map <String, Integer> classes;
 	
 	
-	Operation operation = Operation.EXTRACTALL;
+	Operation operation = Operation.EXTRACTCLASSES;
 	public Output output = Output.TSV;
 
 	Boolean findEquivalences = false;
@@ -209,6 +209,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 							else
 								label = otherlabels.iterator().next().getText();
 						}
+						label = label.replace("\t", " ");
 						
 						//Find equivalent class from schema.org and dbpedia.
 						if (findEquivalences) {
