@@ -56,52 +56,33 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subClassesStream, jsonStream;
-	
-	enum Operation {FINDCLASSES, EXTRACTJSON, EXTRACTTSV}
-	static Operation operation;
-	
-	Map <String, Integer> classes;
+
+	enum Operation {EXTRACTCLASSES, EXTRACTSUBCLASSES, EXTRACTALL}
+	enum Output {JSON, TSV, CACHE}
 
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
+	Operation operation = Operation.EXTRACTCLASSES;
+	public Output output = Output.CACHE;
 
-	/**
-	 * Runs the example program.
-	 *
-	 * @param args
-	 * @throws IOException (if there was a problem in writing the output file)
-	 */
-	public static void main(String[] args) throws IOException {
-		ExampleHelpers.configureLogging();
+	Map <String, Integer> classes;
 
-		TaxonomyProcessor jsonTaxonomyProcessor = new TaxonomyProcessor(Operation.EXTRACTTSV);
-		//operation = Operation.FINDCLASSES;
-		//ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
-		//jsonTaxonomyProcessor.caching("write");
 
-		jsonTaxonomyProcessor.caching("read");
-		ExampleHelpers.processEntitiesFromWikidataDump(jsonTaxonomyProcessor);
-		
-		jsonTaxonomyProcessor.close();
-	}	
-	
 	/**
 	 * Constructor. Opens the file that we want to write to.
 	 *
-	 * @param Operation op
 	 * @throws IOException (if there is a problem opening the output file(s))
 	 */
-	public TaxonomyProcessor(Operation op) throws IOException {
+	public TaxonomyProcessor() throws IOException {
 
 		this.classes = new HashMap<>();
-		operation = op;
 
-		if (operation == Operation.EXTRACTTSV)	{
+		if (output == Output.TSV)	{
 			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
 			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.tsv.gz")));
 		}
-		else if (operation == Operation.EXTRACTJSON) {
+		else if (output == Output.JSON) {
 			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
 
 			//DataModel
@@ -120,15 +101,67 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 		}
 	}
 
+	/**
+	 * Runs the example program.
+	 *
+	 * @param args
+	 * @throws IOException (if there was a problem in writing the output file)
+	 */
+	public static void main(String[] args) throws IOException {
+		ExampleHelpers.configureLogging();
+
+		TaxonomyProcessor taxonomyProcessor = new TaxonomyProcessor();
+
+		if (taxonomyProcessor.output == Output.CACHE) {
+			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
+			taxonomyProcessor.caching("write");			
+		}
+		else {
+			taxonomyProcessor.caching("read");
+			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);			
+		}
+
+		taxonomyProcessor.close();
+	}	
+
+	/**
+	 * Caches classes to file.
+	 * 
+	 * @param operation: "read" or "write"
+	 */	
+	@SuppressWarnings("unchecked")
+	public void caching(String operation) {
+		final String cacheFile="classes";
+
+		try {
+			switch (operation) {	
+			case "read" : {
+				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
+				classes = (Map<String, Integer>) ((ObjectInputStream) objectInputStream).readObject();
+				objectInputStream.close();
+			}
+			case "write" : {
+				ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
+				objectOutputStream.writeObject(classes);
+				objectOutputStream.flush();
+				objectOutputStream.close();
+			}
+			}
+		} catch (ClassNotFoundException | IOException e) {
+			System.err.println("Problem while reading/writing from/to cache.");
+			e.printStackTrace();
+		}
+	}	
+
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
-		if (operation == Operation.FINDCLASSES)
-		{
+		if (output == Output.CACHE) {
+
 			StatementGroup sg = null;
 
 			//instanceOf(I, C) => Class(C) #RDFS
 			sg = itemDocument.findStatementGroup("P31");
-			
+
 			if (sg != null) {
 				for (Statement s : sg.getStatements()) {			
 					ItemIdValue value = (ItemIdValue) s.getValue();
@@ -146,7 +179,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 			if (sg != null) {
 				if(!this.classes.containsKey(sg.getSubject().getId()))
 					this.classes.put(sg.getSubject().getId(), 0);
-				
+
 				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null)
@@ -155,12 +188,14 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 				}				
 			}			
 		}
-		else {
-			if(classes.containsKey(itemDocument.getEntityId().getId())) {
-				if (operation == Operation.EXTRACTTSV){
-					final String separator = "\t";
-					try {
+		else if (output == Output.TSV) {
 
+			final String separator = "\t";
+
+			if (operation == Operation.EXTRACTCLASSES || operation == Operation.EXTRACTALL) {
+				if(classes.containsKey(itemDocument.getEntityId().getId())) {
+					try {
+						
 						//Add english label; if not exists, add another available.
 						String label = itemDocument.findLabel("en");
 						if (label == null) {
@@ -172,7 +207,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 						}
 
 						StatementGroup sg = null;
-						
+
 						//Find equivalent class from schema.org and dbpedia.
 						String schemaOrgClass = "";
 						String dbpediaOrgClass = "";
@@ -188,9 +223,18 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 										schemaOrgClass = value.getString();
 							}	
 						}
-						
 						this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+dbpediaOrgClass+separator+schemaOrgClass+"\n").getBytes());									
-						
+					} catch (IOException e) {
+						e.printStackTrace();
+					}	
+				}
+			}
+			else if (operation == Operation.EXTRACTSUBCLASSES || operation == Operation.EXTRACTALL) {
+				if(classes.containsKey(itemDocument.getEntityId().getId())) {
+					try {
+
+						StatementGroup sg = null;
+
 						//Find subclass relations.
 						sg = itemDocument.findStatementGroup("P279");
 
@@ -203,13 +247,14 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 						}
 					} catch (IOException e) {
 						e.printStackTrace();
-					}								
+					}		
 				}
-				else if (operation == Operation.EXTRACTJSON) {
-						this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
-				}
-			}							
-		}		
+			}				
+		}
+		else if (output == Output.JSON) {
+			if(classes.containsKey(itemDocument.getEntityId().getId()))
+				this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+		}
 	}
 
 	@Override
@@ -218,46 +263,18 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	}
 
 	/**
-	 * Caches classes to file.
-	 * 
-	 * @param operation: "read" or "write"
-	 */	
-	@SuppressWarnings("unchecked")
-	public void caching(String operation) {
-		final String cacheFile="classes";
-		
-		try {
-			switch (operation) {	
-				case "read" : {
-					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-					classes = (Map<String, Integer>) ((ObjectInputStream) objectInputStream).readObject();
-					objectInputStream.close();
-				}
-				case "write" : {
-					ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
-					objectOutputStream.writeObject(classes);
-					objectOutputStream.flush();
-					objectOutputStream.close();
-				}
-			}
-		} catch (ClassNotFoundException | IOException e) {
-			e.printStackTrace();
-		}
-	}	
-	
-	/**
 	 * Closes the output. Should be called after the taxonomy serialization was finished.
 	 *
 	 * @throws IOException (if there was a problem closing the output)
 	 */
 	public void close() throws IOException {
-		if(operation == Operation.EXTRACTTSV) {
+		if(output == Output.TSV) {
 			this.classesStream.close();
 			this.subClassesStream.close();
 		}
-		else if (operation == Operation.EXTRACTJSON) {
+		else if (output == Output.JSON) {
 			this.jsonStream.close();
 		}
 	}
-	
+
 }
