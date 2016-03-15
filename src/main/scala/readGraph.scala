@@ -36,8 +36,8 @@ object readGraph {
   
   def firstLevelStatistics {
 	  //vertices = classes, edges = subclass relations
-	  println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges)
-
+	  println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges, "Instances: "+ graph.vertices.map{case ((_, (_, numOfInstances))) => numOfInstances}.reduce(_ + _))
+	  
 		println("Classes without label: " + graph.vertices.filter{case (_, (label, _)) => label.equals("No Label")}.count())
 		println("Classes without instanses: " + graph.vertices.filter{case (_, (_, numOfInstances)) => numOfInstances.equals(0)}.count())    
   }
