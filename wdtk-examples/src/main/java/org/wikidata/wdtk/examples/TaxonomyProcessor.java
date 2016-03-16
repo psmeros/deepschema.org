@@ -63,6 +63,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
+	//NOTICE: some time in the future we must change the #InstancesPerClass from Integer to Long (probably never). 
 	Map <String, Integer> classes;
 	
 	
@@ -70,6 +71,8 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	public Output output = Output.TSV;
 
 	Boolean findEquivalences = false;
+	
+	Boolean filterCategories = true;
 
 	/**
 	 * Constructor. Opens the file that we want to write to.
@@ -210,6 +213,10 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 								label = otherlabels.iterator().next().getText();
 						}
 						label = label.replace("\t", " ");
+						
+						//filter category classes
+						if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")))
+							return;	
 						
 						//Find equivalent class from schema.org and dbpedia.
 						if (findEquivalences) {
