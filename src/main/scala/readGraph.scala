@@ -19,15 +19,16 @@ object readGraph {
   //create graph from edges ignoring single node classes
   val graphFromEdges = true
   
-  //ignore classes without instances
-  val ignoreClassesWithoutInstances = false
+  //remove classes without label
+  val removeClassesWithoutLabel = true
   
   //read from csv files
   lazy val verticesRDD = sc.textFile(verticesFile).map(line => line.split(separator)).map(line => (line(0).toString.substring(1).toLong, (line(1).toString, line(2).toInt)))
   lazy val edgesRDD = sc.textFile(edgesFile).map(line => line.split(separator)).map(line => Edge(line(0).toString.substring(1).toLong, line(1).toString.substring(1).toLong, "subclass"))
 
   //create graph
-  lazy val graph = if (graphFromEdges) Graph.fromEdges(edgesRDD, ("No Label", 0)).joinVertices(verticesRDD){case (_, (_, _), (label, numOfInstances)) => (label, numOfInstances)} else Graph(verticesRDD, edgesRDD, ("No Label", 0))
+  lazy val initialGraph = if (graphFromEdges) Graph.fromEdges(edgesRDD, ("No Label", 0)).joinVertices(verticesRDD){case (_, (_, _), (label, numOfInstances)) => (label, numOfInstances)} else Graph(verticesRDD, edgesRDD, ("No Label", 0))
+  lazy val graph = if (removeClassesWithoutLabel) initialGraph.subgraph(vpred = (id, attr) => attr._1 != "No Label") else initialGraph
   
   //outDegree=0 => root class
   lazy val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter{case (_, neighbors) => neighbors.size==0}.join(graph.vertices).map{case (id, (_, (label, numOfInstances))) => (id, (label, numOfInstances))}
@@ -81,6 +82,12 @@ object readGraph {
     metadata2.close()
   }
 
+  def instancesStatistics {
+    val writer = new PrintWriter(new File("instancesPerClass.tsv" ))
+    graph.vertices.collect.foreach{case (_, (label, numOfInstances)) => writer.write(label + "\t" + numOfInstances + "\n")}
+    writer.close
+  }
+  
   def main(args: Array[String]) {
 
 	  if (args.length == 2) {
@@ -89,7 +96,8 @@ object readGraph {
 	   
 		  firstLevelStatistics
 		  //hierarchyStatistics
-		  //createSubgraphs
+		  createSubgraphs
+		  //instancesStatistics
 	  }
   }
 }
