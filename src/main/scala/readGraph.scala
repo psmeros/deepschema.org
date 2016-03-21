@@ -13,6 +13,8 @@ object readGraph {
   val separator = "\t"
   val newline = "\n"
   
+  case class Vertex(val label:String, val numOfInstances:Int, val isRoot:Boolean)
+  
   //initialize Spark
   val conf = new SparkConf().setAppName("readGraph").setMaster("local")
   val sc = new SparkContext(conf)
@@ -24,27 +26,27 @@ object readGraph {
   val removeClassesWithoutLabel = true
   
   //read from csv files
-  lazy val verticesRDD = sc.textFile(verticesFile).map(line => line.split(separator)).map(line => (line(0).toString.substring(1).toLong, (line(1).toString, line(2).toInt)))
+  lazy val verticesRDD = sc.textFile(verticesFile).map(line => line.split(separator)).map(line => (line(0).toString.substring(1).toLong, Vertex(line(1).toString, line(2).toInt, false)))
   lazy val edgesRDD = sc.textFile(edgesFile).map(line => line.split(separator)).map(line => Edge(line(0).toString.substring(1).toLong, line(1).toString.substring(1).toLong, "subclass"))
 
   //create graph
-  lazy val initialGraph = if (graphFromEdges) Graph.fromEdges(edgesRDD, ("No Label", 0)).joinVertices(verticesRDD){case (_, (_, _), (label, numOfInstances)) => (label, numOfInstances)} else Graph(verticesRDD, edgesRDD, ("No Label", 0))
-  lazy val graph = if (removeClassesWithoutLabel) initialGraph.subgraph(vpred = (id, attr) => attr._1 != "No Label") else initialGraph
+  lazy val initialGraph = if (graphFromEdges) Graph.fromEdges(edgesRDD, Vertex("No Label", 0, true)).joinVertices(verticesRDD){case (_, _, vertex) => vertex} else Graph(verticesRDD, edgesRDD, Vertex("No Label", 0, true))
+  lazy val graph = if (removeClassesWithoutLabel) initialGraph.subgraph(vpred = (id, vertex) => vertex.label != "No Label") else initialGraph
   
   //outDegree=0 => root class
-  lazy val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter{case (_, neighbors) => neighbors.size==0}.join(graph.vertices).map{case (id, (_, (label, numOfInstances))) => (id, (label, numOfInstances))}
+  lazy val rootClasses = graph.collectNeighborIds(EdgeDirection.Out).filter{case (_, neighbors) => neighbors.size==0}.join(graph.vertices).map{case (id, (_, vertex)) => (id, vertex)}
   //inDegree=0 => leaf class
-  lazy val leafClasses = graph.collectNeighborIds(EdgeDirection.In).filter{case (_, neighbors) => neighbors.size==0}.join(graph.vertices).map{case (id, (_, (label, numOfInstances))) => (id, (label, numOfInstances))} 
+  lazy val leafClasses = graph.collectNeighborIds(EdgeDirection.In).filter{case (_, neighbors) => neighbors.size==0}.join(graph.vertices).map{case (id, (_, vertex)) => (id, vertex)} 
 
   //compute subgraphs
-	lazy val subgraphs = graph.connectedComponents().vertices.join(verticesRDD).leftOuterJoin(rootClasses).map{ case ((id, ((graphId, (label, numOfInstances)), isRoot))) => (graphId, (id, (label, numOfInstances, isRoot.exists(_ => true))))}.groupByKey
+	lazy val subgraphs = graph.connectedComponents().vertices.join(verticesRDD).leftOuterJoin(rootClasses).map{ case ((id, ((graphId, vertex), rootVertex))) => (graphId, (id, Vertex(vertex.label, vertex.numOfInstances, rootVertex.exists(_ => true))))}.groupByKey
 
   def firstLevelStatistics {
 	  //vertices = classes, edges = subclass relations
-	  println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges, "Instances: "+ graph.vertices.map{case ((_, (_, numOfInstances))) => numOfInstances}.reduce(_ + _))
+	  println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges, "Instances: "+ graph.vertices.map{case ((_, vertex)) => vertex.numOfInstances}.reduce(_ + _))
 	  
-		println("Classes without label: " + graph.vertices.filter{case (_, (label, _)) => label.equals("No Label")}.count())
-		println("Classes without instanses: " + graph.vertices.filter{case (_, (_, numOfInstances)) => numOfInstances.equals(0)}.count())    
+		println("Classes without label: " + graph.vertices.filter{case (_, vertex) => vertex.label.equals("No Label")}.count())
+		println("Classes without instanses: " + graph.vertices.filter{case (_, vertex) => vertex.numOfInstances.equals(0)}.count())    
   }
   
   def hierarchyStatistics {
@@ -54,18 +56,10 @@ object readGraph {
     val rootNotSingleNodeClasses = rootClasses.subtract(leafClasses)
     
     //print statistics
-    println("Root Classes: " + rootClasses.count())
-    println("Leaf Classes: " + leafClasses.count())
-    println("Single Node Classes: " + singleNodeClasses.count())    
-    println("Root not Single Node Classes: " + rootNotSingleNodeClasses.count())
-
-    //write classes to files         
-    val writer1 = new PrintWriter(new File("singleNodeClasses.csv" ))
-    val writer2 = new PrintWriter(new File("rootNotSingleNodeClasses.csv" ))
-    singleNodeClasses.collect.foreach{case (id, (label, numOfInstances)) => writer1.write("http://www.wikidata.org/wiki/Q" + id + " , " + label + newline)}
-    rootNotSingleNodeClasses.collect.foreach{case (id, (label, numOfInstances)) => writer2.write("http://www.wikidata.org/wiki/Q" + id + " , " + label + newline)}
-    writer1.close()
-    writer2.close()
+    println("Root Classes: " + rootClasses.count)
+    println("Leaf Classes: " + leafClasses.count)
+    println("Single Node Classes: " + singleNodeClasses.count)    
+    println("Root not Single Node Classes: " + rootNotSingleNodeClasses.count)
   }
   
   def subgraphsStatistics {
@@ -73,32 +67,32 @@ object readGraph {
 	  //write metadata about subgraphs
     val metadata1 = new PrintWriter(new File("subgraphs.txt" ))
     metadata1.write("#Subgraphs: " + subgraphs.count + newline)
-    subgraphs.foreach{ case (graphId, vertices) => 
-    metadata1.write("======Graph " + graphId + " (#Roots: " + vertices.count{case (_, (_, _, isRoot)) => isRoot} + ", #Classes: " + vertices.size + ")======\n")
-    vertices.foreach{ case (_, (label, _, isRoot)) => if (isRoot) metadata1.write(label + newline)}}
+    subgraphs.collect.foreach{ case (graphId, vertices) => 
+    metadata1.write("======Graph " + graphId + " (#Roots: " + vertices.count{case (_, vertex) => vertex.isRoot} + ", #Classes: " + vertices.size + ")======\n")
+    vertices.foreach{ case (_, vertex) => if (vertex.isRoot) metadata1.write(vertex.label + newline)}}
     metadata1.close()
     
     val metadata2 = new PrintWriter(new File("subgraphs.tsv" ))
-    subgraphs.foreach{ case (graphId, vertices) => 
-    metadata2.write("G" + graphId + separator + vertices.size + separator + vertices.map(f => (f._2._2)).sum + newline)}
+    subgraphs.collect.foreach{ case (graphId, vertices) => 
+    metadata2.write("G" + graphId + separator + vertices.size + separator + vertices.map{ case (_, vertex) => vertex.numOfInstances}.sum + newline)}
     metadata2.close()
   }
 
   def instancesStatistics {
     val writer = new PrintWriter(new File("instancesPerClass.tsv" ))
-    graph.vertices.collect.foreach{case (_, (label, numOfInstances)) => writer.write(label + separator + numOfInstances + newline)}
+    graph.vertices.collect.sortBy{case (id, vertex) => vertex.numOfInstances}(Ordering[Int].reverse).foreach{case (_, vertex) => writer.write(vertex.label + separator + vertex.numOfInstances + newline)}
     writer.close
   }
   
-  def extractSubgraph(id:Integer) {
-    val subgraph = subgraphs.filter{case (graphId, _) => graphId==id}.map{case (_, vertices) => vertices}.flatMap(f=>f)
+  def extractSubgraph(id:Int) {    
+    val subgraph = Graph(subgraphs.filter{case (graphId, _) => graphId==id}.map{case (_, vertices) => vertices}.flatMap(f=>f), edgesRDD, Vertex("No Label", 0, true)).subgraph(vpred = (id, vertex) => vertex.label != "No Label")
     
     val writer1 = new PrintWriter(new File("Graph" + id + "_Edges.tsv" ))
-    graph.joinVertices(subgraph){case (_, (label, numOfInstances), _) => (label, numOfInstances)}.edges.collect.foreach{edge => writer1.write(edge.srcId + separator + edge.dstId + newline) }
+    subgraph.edges.collect.foreach{edge => writer1.write(edge.srcId + separator + edge.dstId + newline) }
     writer1.close()
     
     val writer2 = new PrintWriter(new File("Graph" + id + "_Vertices.tsv" ))
-    subgraph.collect.foreach{case (id, (label, numOfIsntances, isRoot)) => writer2.write(id + separator + label + separator + numOfIsntances + separator + isRoot + newline)}
+    subgraph.vertices.collect.foreach{case (id, vertex) => writer2.write(id + separator + vertex.label + separator + vertex.numOfInstances + separator + vertex.isRoot + newline)}
     writer2.close()    
   }
   
