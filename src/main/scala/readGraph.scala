@@ -94,6 +94,10 @@ object readGraph {
     val writer2 = new PrintWriter(new File("Graph" + id + "_Vertices.tsv" ))
     subgraph.vertices.collect.foreach{case (id, vertex) => writer2.write(id + separator + vertex.label + separator + vertex.numOfInstances + separator + vertex.isRoot + newline)}
     writer2.close()    
+
+    val writer3 = new PrintWriter(new File("Graph" + id + "_Roots.tsv" ))
+    subgraph.vertices.filter{case (_, vertex) => vertex.isRoot}.collect.foreach{case (id, vertex) => writer3.write(id + separator + vertex.label + newline)}
+    writer3.close()        
   }
   
   def main(args: Array[String]) {
