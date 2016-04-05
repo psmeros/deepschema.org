@@ -30,6 +30,7 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
@@ -39,6 +40,8 @@ import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
 import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
 import org.wikidata.wdtk.datamodel.interfaces.PropertyDocument;
+import org.wikidata.wdtk.datamodel.interfaces.Reference;
+import org.wikidata.wdtk.datamodel.interfaces.Snak;
 import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
 import org.wikidata.wdtk.datamodel.interfaces.StringValue;
@@ -67,12 +70,14 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	Map <String, Integer> classes;
 	
 	
-	Operation operation = Operation.EXTRACTCLASSES;
+	Operation operation = Operation.EXTRACTSUBCLASSES;
 	public Output output = Output.TSV;
 
 	Boolean findEquivalences = false;
 	
-	Boolean filterCategories = true;
+	Boolean filterCategories = false;
+	
+	Boolean filterDiseaseOntology = true;
 
 	/**
 	 * Constructor. Opens the file that we want to write to.
@@ -212,7 +217,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 							else
 								label = otherlabels.iterator().next().getText();
 						}
-						label = label.replace("\t", " ");
+						label = label.replace(separator, " ");
 						
 						//filter category classes
 						if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")))
@@ -254,6 +259,21 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 						if (sg != null) {
 							for (Statement s : sg.getStatements()) {
+
+								//filter relations from Disease Ontology.
+								if (filterDiseaseOntology && !s.getReferences().isEmpty()) {
+									Iterator<? extends Reference> it = s.getReferences().iterator();
+									while (it.hasNext()) {
+										Iterator<Snak> sn = it.next().getAllSnaks();
+										Snak snack;
+										while (sn.hasNext()) {
+											snack = sn.next();
+											if (snack.getPropertyId().getId().equals("P1065") && snack.getValue().toString().contains("DiseaseOntology"))
+												return;
+										}	
+									}
+								}
+								
 								ItemIdValue value = (ItemIdValue) s.getValue();
 								if (value != null)
 									this.subClassesStream.write((itemDocument.getEntityId().getId()+separator+value.getId()+"\n").getBytes());					 
