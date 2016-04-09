@@ -44,7 +44,6 @@ import org.wikidata.wdtk.datamodel.interfaces.Reference;
 import org.wikidata.wdtk.datamodel.interfaces.Snak;
 import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
-import org.wikidata.wdtk.datamodel.interfaces.StringValue;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 
@@ -72,8 +71,6 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	
 	Operation operation = Operation.EXTRACTSUBCLASSES;
 	public Output output = Output.TSV;
-
-	Boolean findEquivalences = false;
 	
 	Boolean filterCategories = false;
 	
@@ -223,26 +220,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 						if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")))
 							return;	
 						
-						//Find equivalent class from schema.org and dbpedia.
-						if (findEquivalences) {
-							String schemaOrgClass = "";
-							String dbpediaOrgClass = "";
-							StatementGroup sg = itemDocument.findStatementGroup("P1709");
-
-							if (sg != null) {
-								for (Statement s : sg.getStatements()) {
-									StringValue value = (StringValue) s.getValue();
-									if (value != null)
-										if	(value.getString().contains("dbpedia.org"))
-											dbpediaOrgClass = value.getString();
-										else if (value.getString().contains("schema.org"))
-											schemaOrgClass = value.getString();
-								}	
-							}
-							this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+classes.get(itemDocument.getEntityId().getId())+separator+dbpediaOrgClass+separator+schemaOrgClass+"\n").getBytes());
-						}
-						else
-							this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+classes.get(itemDocument.getEntityId().getId())+"\n").getBytes());
+						this.classesStream.write((itemDocument.getEntityId().getId()+separator+label+separator+classes.get(itemDocument.getEntityId().getId())+"\n").getBytes());
 					} catch (IOException e) {
 						e.printStackTrace();
 					}	
