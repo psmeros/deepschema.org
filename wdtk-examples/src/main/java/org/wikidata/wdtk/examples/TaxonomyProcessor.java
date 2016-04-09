@@ -65,8 +65,8 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
-	//NOTICE: some time in the future we must change the #InstancesPerClass from Integer to Long (probably never). 
 	Map <String, Integer> classes;
+	Map <String, String> subclasses;
 	
 	
 	Operation operation = Operation.EXTRACTSUBCLASSES;
@@ -190,10 +190,26 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 					this.classes.put(sg.getSubject().getId(), 0);
 
 				for (Statement s : sg.getStatements()) {
+					
+					//filter relations from Disease Ontology.
+					if (filterDiseaseOntology && !s.getReferences().isEmpty()) {
+						Iterator<? extends Reference> it = s.getReferences().iterator();
+						while (it.hasNext()) {
+							Iterator<Snak> sn = it.next().getAllSnaks();
+							Snak snack;
+							while (sn.hasNext()) {
+								snack = sn.next();
+								if (snack.getPropertyId().getId().equals("P1065") && snack.getValue().toString().contains("DiseaseOntology"))
+									return;
+							}	
+						}
+					}
+					
 					ItemIdValue value = (ItemIdValue) s.getValue();
-					if (value != null)
+					if (value != null) {
 						if(!this.classes.containsKey(value.getId()))
-							this.classes.put(value.getId(), 0); 
+							this.classes.put(value.getId(), 0);
+					}
 				}				
 			}			
 		}
@@ -205,7 +221,7 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 				if(classes.containsKey(itemDocument.getEntityId().getId())) {
 					try {
 						
-						//Add english label; if not exists, add another available.
+						//Add english label; if not exists, add the first available.
 						String label = itemDocument.findLabel("en");
 						if (label == null) {
 							Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
@@ -238,19 +254,6 @@ public class TaxonomyProcessor implements EntityDocumentProcessor {
 						if (sg != null) {
 							for (Statement s : sg.getStatements()) {
 
-								//filter relations from Disease Ontology.
-								if (filterDiseaseOntology && !s.getReferences().isEmpty()) {
-									Iterator<? extends Reference> it = s.getReferences().iterator();
-									while (it.hasNext()) {
-										Iterator<Snak> sn = it.next().getAllSnaks();
-										Snak snack;
-										while (sn.hasNext()) {
-											snack = sn.next();
-											if (snack.getPropertyId().getId().equals("P1065") && snack.getValue().toString().contains("DiseaseOntology"))
-												return;
-										}	
-									}
-								}
 								
 								ItemIdValue value = (ItemIdValue) s.getValue();
 								if (value != null)
