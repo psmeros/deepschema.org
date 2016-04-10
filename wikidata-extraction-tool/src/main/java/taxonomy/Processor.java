@@ -1,5 +1,4 @@
-package taxonomy;
-
+package org.wikidata.wdtk.examples;
 
 /*
  * #%L
@@ -56,7 +55,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  * @author Panayiotis Smeros
  *
  */
-public class Processor implements EntityDocumentProcessor {
+public class TaxonomyProcessor implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subClassesStream, jsonStream;
 
@@ -71,7 +70,7 @@ public class Processor implements EntityDocumentProcessor {
 	
 	
 	Operation operation = Operation.EXTRACTSUBCLASSES;
-	public Output output = Output.CACHE;
+	public Output output = Output.TSV;
 	
 	Boolean filterCategories = false;
 	
@@ -82,7 +81,7 @@ public class Processor implements EntityDocumentProcessor {
 	 *
 	 * @throws IOException (if there is a problem opening the output file(s))
 	 */
-	public Processor() throws IOException {
+	public TaxonomyProcessor() throws IOException {
 
 		this.classes = new HashMap<>();
 
@@ -120,7 +119,7 @@ public class Processor implements EntityDocumentProcessor {
 	public static void main(String[] args) throws IOException {
 		ExampleHelpers.configureLogging();
 
-		Processor taxonomyProcessor = new Processor();
+		TaxonomyProcessor taxonomyProcessor = new TaxonomyProcessor();
 
 		if (taxonomyProcessor.output == Output.CACHE) {
 			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
@@ -141,7 +140,7 @@ public class Processor implements EntityDocumentProcessor {
 	 */	
 	@SuppressWarnings("unchecked")
 	public void caching(String operation) {
-		final String cacheFile="classes.cache";
+		final String cacheFile="classes";
 
 		try {
 			switch (operation) {	
