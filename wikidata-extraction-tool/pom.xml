@@ -1,0 +1,72 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>org.deepschema</groupId>
+	<artifactId>wikidata-extraction-tool</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>Wikidata Extraction Tool</name>
+	<packaging>jar</packaging>
+	<url>http://deepschema.org</url>
+
+	<properties>
+		<wdGroupId>org.wikidata.wdtk</wdGroupId>
+		<wdVersion>0.6.0</wdVersion>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<apacheCommonsCompressVersion>1.9</apacheCommonsCompressVersion>
+		<apacheCommonsLangVersion>3.3.2</apacheCommonsLangVersion>
+		<apacheHttpVersion>4.3.3</apacheHttpVersion>
+		<commonsCliVersion>1.2</commonsCliVersion>
+		<ini4JVersion>0.5.2</ini4JVersion>
+		<jacksonVersion>2.5.0</jacksonVersion>
+		<junitVersion>4.12</junitVersion>
+		<mockitoVersion>1.10.19</mockitoVersion>
+		<sesameVersion>2.7.14</sesameVersion>
+		<slf4jVersion>1.7.10</slf4jVersion>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-datamodel</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-dumpfiles</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-rdf</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-util</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-wikibaseapi</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>${wdGroupId}</groupId>
+			<artifactId>wdtk-storage</artifactId>
+			<version>${wdVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-log4j12</artifactId>
+			<version>${slf4jVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-compress</artifactId>
+			<version>${apacheCommonsCompressVersion}</version>
+		</dependency>
+	</dependencies>
+
+
+</project>
