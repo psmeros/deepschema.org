@@ -73,11 +73,11 @@ public class Processor implements EntityDocumentProcessor {
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
-	Map <Pair <String, String>, Integer> classes;
+	Map <String, Pair <String, Integer>> classes;
 	Set <Pair <String, String>> subclasses;
 
 	//Parameters
-	public Output output = Output.JSON;
+	public Output output = Output.TSV;
 
 	public Boolean useCache = true;
 
@@ -133,7 +133,7 @@ public class Processor implements EntityDocumentProcessor {
 			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
 			taxonomyProcessor.operation = Operation.ENCHANCE;
 			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
-			if (taxonomyProcessor.output== Output.JSON) {
+			if (taxonomyProcessor.output == Output.JSON) {
 				taxonomyProcessor.operation = Operation.WRITE;
 				ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);			
 			}
@@ -143,7 +143,7 @@ public class Processor implements EntityDocumentProcessor {
 		}
 		else {
 			taxonomyProcessor.caching("read");
-			if (taxonomyProcessor.output== Output.JSON) {
+			if (taxonomyProcessor.output == Output.JSON) {
 				taxonomyProcessor.operation = Operation.WRITE;
 				ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);			
 			}
@@ -161,11 +161,11 @@ public class Processor implements EntityDocumentProcessor {
 	 */		
 	public void writeToStreams() {
 		try {
-			for (Entry<Pair<String, String>, Integer> entry : this.classes.entrySet())
-				classesStream.write((entry.getKey().getLeft()+separator+entry.getKey().getRight()+separator+entry.getValue()+"\n").getBytes());
+			for (Entry<String, Pair<String, Integer>> entry : this.classes.entrySet())
+				classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().getLeft()+separator+entry.getValue().getRight()+"\n").getBytes());
 
 			for (Pair<String, String> entry : subclasses)
-				subClassesStream.write((entry.getLeft()+separator+entry.getRight()+"\n").getBytes());					 
+				subClassesStream.write((entry.getLeft().substring(1)+separator+entry.getRight().substring(1)+"\n").getBytes());					 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -183,7 +183,7 @@ public class Processor implements EntityDocumentProcessor {
 			switch (operation) {	
 			case "read" : {
 				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-				classes = (Map<Pair<String, String>, Integer>) ((ObjectInputStream) objectInputStream).readObject();
+				classes = (Map<String, Pair<String, Integer>>) ((ObjectInputStream) objectInputStream).readObject();
 				subclasses = (Set<Pair<String, String>>) ((ObjectInputStream) objectInputStream).readObject();
 				objectInputStream.close();
 			}
@@ -214,10 +214,10 @@ public class Processor implements EntityDocumentProcessor {
 				for (Statement s : sg.getStatements()) {			
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null)
-						if(!this.classes.containsKey(Pair.of(value.getId(), "")))
-							this.classes.put(Pair.of(value.getId(), ""), 1);
+						if(!this.classes.containsKey(value.getId()))
+							this.classes.put(value.getId(), Pair.of("", 1));
 						else
-							this.classes.put(Pair.of(value.getId(), ""), this.classes.get(Pair.of(value.getId(), "")) + 1);
+							this.classes.put(value.getId(), Pair.of("", this.classes.get(value.getId()).getRight() + 1));
 				}				
 			}
 
@@ -225,8 +225,8 @@ public class Processor implements EntityDocumentProcessor {
 			sg = itemDocument.findStatementGroup("P279");
 
 			if (sg != null) {
-				if(!this.classes.containsKey(Pair.of(sg.getSubject().getId(), "")))
-					this.classes.put(Pair.of(sg.getSubject().getId(), ""), 0);
+				if(!this.classes.containsKey(sg.getSubject().getId()))
+					this.classes.put(sg.getSubject().getId(), Pair.of("", 0));
 
 				for (Statement s : sg.getStatements()) {
 
@@ -246,8 +246,8 @@ public class Processor implements EntityDocumentProcessor {
 
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
-						if(!this.classes.containsKey(Pair.of(value.getId(), "")))
-							this.classes.put(Pair.of(value.getId(), ""), 0);
+						if(!this.classes.containsKey(value.getId()))
+							this.classes.put(value.getId(), Pair.of("", 0));
 
 						subclasses.add(Pair.of(sg.getSubject().getId(), value.getId()));
 					}
@@ -255,7 +255,7 @@ public class Processor implements EntityDocumentProcessor {
 			}			
 		}
 		else if (operation == Operation.ENCHANCE) {
-			if(classes.containsKey(Pair.of(itemDocument.getEntityId().getId(), ""))) {
+			if(classes.containsKey(itemDocument.getEntityId().getId())) {
 
 				//Add english label; if not exists, add the first available.
 				String label = itemDocument.findLabel("en");
@@ -270,15 +270,15 @@ public class Processor implements EntityDocumentProcessor {
 
 				//filter category classes
 				if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":"))) {
-					classes.remove(Pair.of(itemDocument.getEntityId().getId(), ""));
+					classes.remove(itemDocument.getEntityId().getId());
 					return;
 				}							
 
-				classes.put(Pair.of(itemDocument.getEntityId().getId(), label), classes.remove(Pair.of(itemDocument.getEntityId().getId(), "")));
+				classes.put(itemDocument.getEntityId().getId(), Pair.of(label, classes.remove(itemDocument.getEntityId().getId()).getRight()));
 			}
 		}
 		else if (operation == Operation.WRITE && output == Output.JSON) {
-			if(classes.containsKey(Pair.of(itemDocument.getEntityId().getId(), "")))
+			if(classes.containsKey(itemDocument.getEntityId().getId()))
 				this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 	}
