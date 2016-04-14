@@ -27,17 +27,16 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
-import org.apache.commons.lang3.tuple.Pair;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
@@ -69,23 +68,25 @@ public class Processor implements EntityDocumentProcessor {
 	enum Output {JSON, TSV, TXT}
 	final String separator = "\t";
 
+	class ClassProperties {String label; Integer numOfInstances; public ClassProperties (String label, Integer numOfInstances) {this.label=label; this.numOfInstances=numOfInstances;}}
+
 
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
-	Map <String, Pair <String, Integer>> classes;
-	Set <Pair <String, String>> subclasses;
+	Map <String, ClassProperties> classes;
+	Map <String, List <String>> subclasses;
 
 	//Parameters
-	Output output = Output.TXT;
+	Output output = Output.TSV;
 
-	Boolean useCache = true;
+	Boolean useCache = false;
 
 	Boolean filterCategories = false;
 
 	Boolean filterDiseaseOntology = true;
 
-	
+
 	/**
 	 * Constructor. Opens the file that we want to write to.
 	 *
@@ -94,7 +95,7 @@ public class Processor implements EntityDocumentProcessor {
 	public Processor() throws IOException {
 
 		this.classes = new HashMap<>();
-		this.subclasses = new HashSet<>();
+		this.subclasses = new HashMap<>();
 
 		if (output == Output.TSV)	{
 			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
@@ -139,7 +140,7 @@ public class Processor implements EntityDocumentProcessor {
 	 * Initializes the procedure.
 	 */		
 	public void init() {	
-		if (useCache) {
+		if (!useCache) {
 			operation = Operation.READ;
 			ExampleHelpers.processEntitiesFromWikidataDump(this);
 			operation = Operation.ENCHANCE;
@@ -159,11 +160,12 @@ public class Processor implements EntityDocumentProcessor {
 	public void writeOutput() {	
 		try {
 			if (output == Output.TSV) {
-				for (Entry<String, Pair<String, Integer>> entry : this.classes.entrySet())
-					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().getLeft()+separator+entry.getValue().getRight()+"\n").getBytes());
+				for (Entry<String, ClassProperties> entry : classes.entrySet())
+					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().label+separator+entry.getValue().numOfInstances+"\n").getBytes());
 
-				for (Pair<String, String> entry : subclasses)
-					subClassesStream.write((entry.getLeft().substring(1)+separator+entry.getRight().substring(1)+"\n").getBytes());
+				for (Entry<String, List <String>> entry : subclasses.entrySet())
+					for (String value : entry.getValue())
+						subClassesStream.write((entry.getKey().substring(1)+separator+value.substring(1)+"\n").getBytes());
 
 				this.classesStream.close();
 				this.subClassesStream.close();
@@ -195,8 +197,8 @@ public class Processor implements EntityDocumentProcessor {
 			switch (action) {	
 			case "read" : {
 				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-				classes = (Map<String, Pair<String, Integer>>) ((ObjectInputStream) objectInputStream).readObject();
-				subclasses = (Set<Pair<String, String>>) ((ObjectInputStream) objectInputStream).readObject();
+				classes = (Map<String, ClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
+				subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
 				objectInputStream.close();
 			}
 			case "write" : {				
@@ -225,11 +227,11 @@ public class Processor implements EntityDocumentProcessor {
 			if (sg != null) {
 				for (Statement s : sg.getStatements()) {			
 					ItemIdValue value = (ItemIdValue) s.getValue();
-					if (value != null)
+					if (value != null) {
 						if(!this.classes.containsKey(value.getId()))
-							this.classes.put(value.getId(), Pair.of("", 1));
-						else
-							this.classes.put(value.getId(), Pair.of("", this.classes.get(value.getId()).getRight() + 1));
+							this.classes.put(value.getId(), new ClassProperties("", 0));
+						this.classes.get(value.getId()).numOfInstances = this.classes.get(value.getId()).numOfInstances + 1;
+					}
 				}				
 			}
 
@@ -238,27 +240,17 @@ public class Processor implements EntityDocumentProcessor {
 
 			if (sg != null) {
 				if(!this.classes.containsKey(sg.getSubject().getId()))
-					this.classes.put(sg.getSubject().getId(), Pair.of("", 0));
+					this.classes.put(sg.getSubject().getId(), new ClassProperties("", 0));
 
 				for (Statement s : sg.getStatements()) {
-
-					//filter relations from Disease Ontology.
-					if (filterDiseaseOntology && !s.getReferences().isEmpty()) {
-						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
-							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-								Snak snak = sn.next();
-								if (snak.getPropertyId().getId().equals("P1065") && snak.getValue().toString().contains("DiseaseOntology"))
-									return;
-							}	
-						}
-					}
-
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
 						if(!this.classes.containsKey(value.getId()))
-							this.classes.put(value.getId(), Pair.of("", 0));
+							this.classes.put(value.getId(), new ClassProperties("", 0));
 
-						subclasses.add(Pair.of(sg.getSubject().getId(), value.getId()));
+						if(!subclasses.containsKey(sg.getSubject().getId()))
+							subclasses.put(sg.getSubject().getId(), new ArrayList<String>());
+						subclasses.get(sg.getSubject().getId()).add(value.getId());
 					}
 				}				
 			}			
@@ -280,10 +272,11 @@ public class Processor implements EntityDocumentProcessor {
 				//filter category classes
 				if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":"))) {
 					classes.remove(itemDocument.getEntityId().getId());
+
 					return;
 				}							
 
-				classes.put(itemDocument.getEntityId().getId(), Pair.of(label, classes.remove(itemDocument.getEntityId().getId()).getRight()));
+				this.classes.get(itemDocument.getEntityId().getId()).label = label;
 			}
 		}
 		else if (operation == Operation.WRITE) {
