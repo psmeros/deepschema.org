@@ -61,12 +61,12 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class Processor implements EntityDocumentProcessor {
 
-	OutputStream classesStream, subClassesStream, jsonStream;
+	OutputStream classesStream, subClassesStream, jsonStream, txtStream;
 
-	enum Operation {READ, ENCHANCE, WRITE}
+	enum Operation {READ, ENCHANCE, WRITE, PROVENANCE}
 	public Operation operation;
 
-	enum Output {JSON, TSV}
+	enum Output {JSON, TSV, TXT}
 	final String separator = "\t";
 
 
@@ -77,14 +77,15 @@ public class Processor implements EntityDocumentProcessor {
 	Set <Pair <String, String>> subclasses;
 
 	//Parameters
-	public Output output = Output.TSV;
+	Output output = Output.TXT;
 
-	public Boolean useCache = true;
+	Boolean useCache = true;
 
-	public Boolean filterCategories = false;
+	Boolean filterCategories = false;
 
-	public Boolean filterDiseaseOntology = true;
+	Boolean filterDiseaseOntology = true;
 
+	
 	/**
 	 * Constructor. Opens the file that we want to write to.
 	 *
@@ -116,6 +117,9 @@ public class Processor implements EntityDocumentProcessor {
 			this.jsonSerializer = new JsonSerializer(jsonStream);
 			this.jsonSerializer.open();
 		}
+		else if (output == Output.TXT) {
+			this.txtStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("output.txt.gz")));
+		}
 	}
 
 	/**
@@ -128,44 +132,52 @@ public class Processor implements EntityDocumentProcessor {
 		ExampleHelpers.configureLogging();
 
 		Processor taxonomyProcessor = new Processor();
-		if (!taxonomyProcessor.useCache) {
-			taxonomyProcessor.operation = Operation.READ;
-			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
-			taxonomyProcessor.operation = Operation.ENCHANCE;
-			ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);
-			if (taxonomyProcessor.output == Output.JSON) {
-				taxonomyProcessor.operation = Operation.WRITE;
-				ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);			
-			}
-			else
-				taxonomyProcessor.writeToStreams();
-			taxonomyProcessor.caching("write");
-		}
-		else {
-			taxonomyProcessor.caching("read");
-			if (taxonomyProcessor.output == Output.JSON) {
-				taxonomyProcessor.operation = Operation.WRITE;
-				ExampleHelpers.processEntitiesFromWikidataDump(taxonomyProcessor);			
-			}
-			else
-				taxonomyProcessor.writeToStreams();
-		}
-
-		taxonomyProcessor.close();
+		taxonomyProcessor.init();
 	}	
 
 	/**
-	 * Writes classes and subclasses to file.
-	 * 
-	 * @param operation: "read" or "write"
+	 * Initializes the procedure.
 	 */		
-	public void writeToStreams() {
-		try {
-			for (Entry<String, Pair<String, Integer>> entry : this.classes.entrySet())
-				classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().getLeft()+separator+entry.getValue().getRight()+"\n").getBytes());
+	public void init() {	
+		if (useCache) {
+			operation = Operation.READ;
+			ExampleHelpers.processEntitiesFromWikidataDump(this);
+			operation = Operation.ENCHANCE;
+			ExampleHelpers.processEntitiesFromWikidataDump(this);
+			writeOutput();
+			cache("write");
+		}
+		else {
+			cache("read");
+			writeOutput();
+		}
+	}
 
-			for (Pair<String, String> entry : subclasses)
-				subClassesStream.write((entry.getLeft().substring(1)+separator+entry.getRight().substring(1)+"\n").getBytes());					 
+	/**
+	 * Writes output to the corresponding files.
+	 */		
+	public void writeOutput() {	
+		try {
+			if (output == Output.TSV) {
+				for (Entry<String, Pair<String, Integer>> entry : this.classes.entrySet())
+					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().getLeft()+separator+entry.getValue().getRight()+"\n").getBytes());
+
+				for (Pair<String, String> entry : subclasses)
+					subClassesStream.write((entry.getLeft().substring(1)+separator+entry.getRight().substring(1)+"\n").getBytes());
+
+				this.classesStream.close();
+				this.subClassesStream.close();
+			}
+			else if (output == Output.JSON) {
+				operation = Operation.WRITE;
+				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				this.jsonStream.close();
+			}			
+			else if (output == Output.TXT) {
+				operation = Operation.PROVENANCE;
+				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				this.txtStream.close();
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -177,17 +189,17 @@ public class Processor implements EntityDocumentProcessor {
 	 * @param operation: "read" or "write"
 	 */	
 	@SuppressWarnings("unchecked")
-	public void caching(String operation) {		
+	public void cache(String action) {		
 		final String cacheFile=".cache";
 		try {
-			switch (operation) {	
+			switch (action) {	
 			case "read" : {
 				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
 				classes = (Map<String, Pair<String, Integer>>) ((ObjectInputStream) objectInputStream).readObject();
 				subclasses = (Set<Pair<String, String>>) ((ObjectInputStream) objectInputStream).readObject();
 				objectInputStream.close();
 			}
-			case "write" : {
+			case "write" : {				
 				ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
 				objectOutputStream.writeObject(classes);
 				objectOutputStream.writeObject(subclasses);
@@ -232,13 +244,10 @@ public class Processor implements EntityDocumentProcessor {
 
 					//filter relations from Disease Ontology.
 					if (filterDiseaseOntology && !s.getReferences().isEmpty()) {
-						Iterator<? extends Reference> it = s.getReferences().iterator();
-						while (it.hasNext()) {
-							Iterator<Snak> sn = it.next().getAllSnaks();
-							Snak snack;
-							while (sn.hasNext()) {
-								snack = sn.next();
-								if (snack.getPropertyId().getId().equals("P1065") && snack.getValue().toString().contains("DiseaseOntology"))
+						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
+							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+								Snak snak = sn.next();
+								if (snak.getPropertyId().getId().equals("P1065") && snak.getValue().toString().contains("DiseaseOntology"))
 									return;
 							}	
 						}
@@ -277,9 +286,30 @@ public class Processor implements EntityDocumentProcessor {
 				classes.put(itemDocument.getEntityId().getId(), Pair.of(label, classes.remove(itemDocument.getEntityId().getId()).getRight()));
 			}
 		}
-		else if (operation == Operation.WRITE && output == Output.JSON) {
+		else if (operation == Operation.WRITE) {
 			if(classes.containsKey(itemDocument.getEntityId().getId()))
 				this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+		}
+		else if (operation == Operation.PROVENANCE) {
+
+			if(classes.containsKey(itemDocument.getEntityId().getId())) {
+
+				for (StatementGroup sg : itemDocument.getStatementGroups()) {
+					for (Statement s : sg) {
+						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
+							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+								try {
+									Snak snak = sn.next();
+									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248"))
+										txtStream.write((snak + "\n").getBytes());
+								} catch (IOException e) {
+									e.printStackTrace();
+								}
+							}	
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -287,20 +317,4 @@ public class Processor implements EntityDocumentProcessor {
 	public void processPropertyDocument(PropertyDocument propertyDocument) {
 		//Do not serialize any properties.
 	}
-
-	/**
-	 * Closes the output. Should be called after the taxonomy serialization was finished.
-	 *
-	 * @throws IOException (if there was a problem closing the output)
-	 */
-	public void close() throws IOException {
-		if(output == Output.TSV) {
-			this.classesStream.close();
-			this.subClassesStream.close();
-		}
-		else if (output == Output.JSON) {
-			this.jsonStream.close();
-		}
-	}
-
 }
