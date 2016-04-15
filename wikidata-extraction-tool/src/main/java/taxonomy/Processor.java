@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -62,13 +63,14 @@ public class Processor implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subClassesStream, jsonStream, txtStream;
 
-	enum Operation {READ, ENCHANCE, WRITE, PROVENANCE}
+	enum Operation {READ, ENHANCE_FILTER, WRITE, PROVENANCE}
 	public Operation operation;
 
 	enum Output {JSON, TSV, TXT}
 	final String separator = "\t";
 
-	class ClassProperties {String label; Integer numOfInstances; public ClassProperties (String label, Integer numOfInstances) {this.label=label; this.numOfInstances=numOfInstances;}}
+	@SuppressWarnings("serial")
+	static class ClassProperties implements Serializable {String label; Integer numOfInstances; public ClassProperties (String label, Integer numOfInstances) {this.label=label; this.numOfInstances=numOfInstances;}}
 
 
 	DatamodelConverter datamodelConverter;
@@ -84,7 +86,7 @@ public class Processor implements EntityDocumentProcessor {
 
 	Boolean filterCategories = false;
 
-	Boolean filterDiseaseOntology = true;
+	Boolean filterBioDBs = true;
 
 
 	/**
@@ -143,7 +145,7 @@ public class Processor implements EntityDocumentProcessor {
 		if (!useCache) {
 			operation = Operation.READ;
 			ExampleHelpers.processEntitiesFromWikidataDump(this);
-			operation = Operation.ENCHANCE;
+			operation = Operation.ENHANCE_FILTER;
 			ExampleHelpers.processEntitiesFromWikidataDump(this);
 			writeOutput();
 			cache("write");
@@ -167,18 +169,18 @@ public class Processor implements EntityDocumentProcessor {
 					for (String value : entry.getValue())
 						subClassesStream.write((entry.getKey().substring(1)+separator+value.substring(1)+"\n").getBytes());
 
-				this.classesStream.close();
-				this.subClassesStream.close();
+				classesStream.close();
+				subClassesStream.close();
 			}
 			else if (output == Output.JSON) {
 				operation = Operation.WRITE;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
-				this.jsonStream.close();
+				jsonStream.close();
 			}			
 			else if (output == Output.TXT) {
 				operation = Operation.PROVENANCE;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
-				this.txtStream.close();
+				txtStream.close();
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -228,9 +230,9 @@ public class Processor implements EntityDocumentProcessor {
 				for (Statement s : sg.getStatements()) {			
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
-						if(!this.classes.containsKey(value.getId()))
-							this.classes.put(value.getId(), new ClassProperties("", 0));
-						this.classes.get(value.getId()).numOfInstances = this.classes.get(value.getId()).numOfInstances + 1;
+						if(!classes.containsKey(value.getId()))
+							classes.put(value.getId(), new ClassProperties("", 0));
+						classes.get(value.getId()).numOfInstances = classes.get(value.getId()).numOfInstances + 1;
 					}
 				}				
 			}
@@ -239,14 +241,14 @@ public class Processor implements EntityDocumentProcessor {
 			sg = itemDocument.findStatementGroup("P279");
 
 			if (sg != null) {
-				if(!this.classes.containsKey(sg.getSubject().getId()))
-					this.classes.put(sg.getSubject().getId(), new ClassProperties("", 0));
+				if(!classes.containsKey(sg.getSubject().getId()))
+					classes.put(sg.getSubject().getId(), new ClassProperties("", 0));
 
 				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
-						if(!this.classes.containsKey(value.getId()))
-							this.classes.put(value.getId(), new ClassProperties("", 0));
+						if(!classes.containsKey(value.getId()))
+							classes.put(value.getId(), new ClassProperties("", 0));
 
 						if(!subclasses.containsKey(sg.getSubject().getId()))
 							subclasses.put(sg.getSubject().getId(), new ArrayList<String>());
@@ -255,7 +257,7 @@ public class Processor implements EntityDocumentProcessor {
 				}				
 			}			
 		}
-		else if (operation == Operation.ENCHANCE) {
+		else if (operation == Operation.ENHANCE_FILTER) {
 			if(classes.containsKey(itemDocument.getEntityId().getId())) {
 
 				//Add english label; if not exists, add the first available.
@@ -272,16 +274,54 @@ public class Processor implements EntityDocumentProcessor {
 				//filter category classes
 				if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":"))) {
 					classes.remove(itemDocument.getEntityId().getId());
-
+					subclasses.remove(itemDocument.getEntityId().getId());
 					return;
 				}							
 
-				this.classes.get(itemDocument.getEntityId().getId()).label = label;
+				classes.get(itemDocument.getEntityId().getId()).label = label;
+
+				//filter classes from Biological DBs
+				if (filterBioDBs) {
+					for (StatementGroup sg : itemDocument.getStatementGroups()) {
+						for (Statement s : sg) {
+							for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
+								for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+									Snak snak = sn.next();
+									if (snak.getValue() != null) {
+										String pid = snak.getPropertyId().getId();
+										String vid = snak.getValue().toString();
+										if ((pid.equals("P143") && vid.equals("Q20641742")) || // NCBI Gene
+												(pid.equals("P248") && vid.equals("Q20950174")) || // NCBI homo sapiens annotation release 107
+												(pid.equals("P143") && vid.equals("Q905695")) || // UniProt
+												(pid.equals("P248") && vid.equals("Q20973051")) || // NCBI mus musculus annotation release 105
+												(pid.equals("P248") && vid.equals("Q2629752")) || // Swiss-Prot 
+												(pid.equals("P248") && vid.equals("Q905695")) || // UniProt
+												(pid.equals("P248") && vid.equals("Q20641742")) || // NCBI Gene
+												(pid.equals("P143") && vid.equals("Q1344256")) || // Ensembl
+												(pid.equals("P248") && vid.equals("Q21996330")) || // Ensembl Release 83
+												(pid.equals("P248") && vid.equals("Q135085")) || // Gene Ontology
+												(pid.equals("P143") && vid.equals("Q22230760")) || // Ontology Lookup Service
+												(pid.equals("P143") && vid.equals("Q1345229")) || // Entrez
+												(pid.equals("P248") && vid.equals("Q5282129")) || // Disease Ontology
+												(pid.equals("P143") && vid.equals("Q468215")) || // HomoloGene
+												(pid.equals("P248") && vid.equals("Q20976936")) || // HomoloGene build68
+												(pid.equals("P248") && vid.equals("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
+												(pid.equals("P248") && vid.equals("Q21234191")) ) { // NuDat
+											classes.remove(itemDocument.getEntityId().getId());
+											subclasses.remove(itemDocument.getEntityId().getId());
+											return;
+										}
+									}
+								}	
+							}
+						}
+					}					
+				}
 			}
 		}
 		else if (operation == Operation.WRITE) {
 			if(classes.containsKey(itemDocument.getEntityId().getId()))
-				this.jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+				jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 		else if (operation == Operation.PROVENANCE) {
 
