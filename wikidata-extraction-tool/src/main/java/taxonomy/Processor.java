@@ -290,23 +290,23 @@ public class Processor implements EntityDocumentProcessor {
 									if (snak.getValue() != null) {
 										String pid = snak.getPropertyId().getId();
 										String vid = snak.getValue().toString();
-										if ((pid.equals("P143") && vid.equals("Q20641742")) || // NCBI Gene
-												(pid.equals("P248") && vid.equals("Q20950174")) || // NCBI homo sapiens annotation release 107
-												(pid.equals("P143") && vid.equals("Q905695")) || // UniProt
-												(pid.equals("P248") && vid.equals("Q20973051")) || // NCBI mus musculus annotation release 105
-												(pid.equals("P248") && vid.equals("Q2629752")) || // Swiss-Prot 
-												(pid.equals("P248") && vid.equals("Q905695")) || // UniProt
-												(pid.equals("P248") && vid.equals("Q20641742")) || // NCBI Gene
-												(pid.equals("P143") && vid.equals("Q1344256")) || // Ensembl
-												(pid.equals("P248") && vid.equals("Q21996330")) || // Ensembl Release 83
-												(pid.equals("P248") && vid.equals("Q135085")) || // Gene Ontology
-												(pid.equals("P143") && vid.equals("Q22230760")) || // Ontology Lookup Service
-												(pid.equals("P143") && vid.equals("Q1345229")) || // Entrez
-												(pid.equals("P248") && vid.equals("Q5282129")) || // Disease Ontology
-												(pid.equals("P143") && vid.equals("Q468215")) || // HomoloGene
-												(pid.equals("P248") && vid.equals("Q20976936")) || // HomoloGene build68
-												(pid.equals("P248") && vid.equals("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
-												(pid.equals("P248") && vid.equals("Q21234191")) ) { // NuDat
+										if ((pid.equals("P143") && vid.contains("Q20641742")) || // NCBI Gene
+												(pid.equals("P248") && vid.contains("Q20950174")) || // NCBI homo sapiens annotation release 107
+												(pid.equals("P143") && vid.contains("Q905695")) || // UniProt
+												(pid.equals("P248") && vid.contains("Q20973051")) || // NCBI mus musculus annotation release 105
+												(pid.equals("P248") && vid.contains("Q2629752")) || // Swiss-Prot 
+												(pid.equals("P248") && vid.contains("Q905695")) || // UniProt
+												(pid.equals("P248") && vid.contains("Q20641742")) || // NCBI Gene
+												(pid.equals("P143") && vid.contains("Q1344256")) || // Ensembl
+												(pid.equals("P248") && vid.contains("Q21996330")) || // Ensembl Release 83
+												(pid.equals("P248") && vid.contains("Q135085")) || // Gene Ontology
+												(pid.equals("P143") && vid.contains("Q22230760")) || // Ontology Lookup Service
+												(pid.equals("P143") && vid.contains("Q1345229")) || // Entrez
+												(pid.equals("P248") && vid.contains("Q5282129")) || // Disease Ontology
+												(pid.equals("P143") && vid.contains("Q468215")) || // HomoloGene
+												(pid.equals("P248") && vid.contains("Q20976936")) || // HomoloGene build68
+												(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
+												(pid.equals("P248") && vid.contains("Q21234191")) ) { // NuDat
 											classes.remove(itemDocument.getEntityId().getId());
 											subclasses.remove(itemDocument.getEntityId().getId());
 											return;
