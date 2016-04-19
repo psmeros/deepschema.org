@@ -61,7 +61,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class Processor implements EntityDocumentProcessor {
 
-	OutputStream classesStream, subClassesStream, jsonStream, txtStream;
+	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream;
 
 	enum Operation {READ, ENHANCE_FILTER, WRITE, PROVENANCE}
 	public Operation operation;
@@ -70,7 +70,7 @@ public class Processor implements EntityDocumentProcessor {
 	final String separator = "\t";
 
 	@SuppressWarnings("serial")
-	static class ClassProperties implements Serializable {String label; Integer numOfInstances; public ClassProperties (String label, Integer numOfInstances) {this.label=label; this.numOfInstances=numOfInstances;}}
+	static class ClassProperties implements Serializable {String label; List <String> instances; public ClassProperties () {this.label = ""; this.instances = new ArrayList<String>();}}
 
 
 	DatamodelConverter datamodelConverter;
@@ -78,6 +78,7 @@ public class Processor implements EntityDocumentProcessor {
 
 	Map <String, ClassProperties> classes;
 	Map <String, List <String>> subclasses;
+	Map <String, String> instances;
 
 	//Parameters
 	Output output = Output.TSV;
@@ -98,13 +99,16 @@ public class Processor implements EntityDocumentProcessor {
 
 		this.classes = new HashMap<>();
 		this.subclasses = new HashMap<>();
+		this.instances = new HashMap<>();
 
 		if (output == Output.TSV)	{
-			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.tsv.gz")));
-			this.subClassesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedSubClasses.tsv.gz")));
+			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classes.tsv.gz")));
+			this.subclassOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("subclassOfRelations.tsv.gz")));
+			this.instancesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("instances.tsv.gz")));
+			this.instanceOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("instanceOfRelations.tsv.gz")));
 		}
 		else if (output == Output.JSON) {
-			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("extractedClasses.json.gz")));
+			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classesAndInstances.json.gz")));
 
 			//DataModel
 			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
@@ -163,14 +167,23 @@ public class Processor implements EntityDocumentProcessor {
 		try {
 			if (output == Output.TSV) {
 				for (Entry<String, ClassProperties> entry : classes.entrySet())
-					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().label+separator+entry.getValue().numOfInstances+"\n").getBytes());
+					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().label+"\n").getBytes());
 
 				for (Entry<String, List <String>> entry : subclasses.entrySet())
 					for (String value : entry.getValue())
-						subClassesStream.write((entry.getKey().substring(1)+separator+value.substring(1)+"\n").getBytes());
+						subclassOfRelationsStream.write((entry.getKey().substring(1)+separator+value.substring(1)+"\n").getBytes());
+
+				for (Entry<String, String> entry : instances.entrySet())
+					instancesStream.write((entry.getKey().substring(1)+separator+entry.getValue()+"\n").getBytes());
+
+				for (Entry<String, ClassProperties> entry : classes.entrySet())
+					for (String value : entry.getValue().instances)
+						instanceOfRelationsStream.write((value.substring(1)+separator+entry.getKey().substring(1)+"\n").getBytes());
 
 				classesStream.close();
-				subClassesStream.close();
+				subclassOfRelationsStream.close();
+				instancesStream.close();
+				instanceOfRelationsStream.close();
 			}
 			else if (output == Output.JSON) {
 				operation = Operation.WRITE;
@@ -201,12 +214,14 @@ public class Processor implements EntityDocumentProcessor {
 				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
 				classes = (Map<String, ClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
 				subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
+				instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
 				objectInputStream.close();
 			}
 			case "write" : {				
 				ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
 				objectOutputStream.writeObject(classes);
 				objectOutputStream.writeObject(subclasses);
+				objectOutputStream.writeObject(instances);
 				objectOutputStream.flush();
 				objectOutputStream.close();
 			}
@@ -231,8 +246,11 @@ public class Processor implements EntityDocumentProcessor {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
 						if(!classes.containsKey(value.getId()))
-							classes.put(value.getId(), new ClassProperties("", 0));
-						classes.get(value.getId()).numOfInstances = classes.get(value.getId()).numOfInstances + 1;
+							classes.put(value.getId(), new ClassProperties());
+						classes.get(value.getId()).instances.add(sg.getSubject().getId());
+
+						if(!instances.containsKey(sg.getSubject().getId()))
+							instances.put(sg.getSubject().getId(), "");
 					}
 				}				
 			}
@@ -242,13 +260,13 @@ public class Processor implements EntityDocumentProcessor {
 
 			if (sg != null) {
 				if(!classes.containsKey(sg.getSubject().getId()))
-					classes.put(sg.getSubject().getId(), new ClassProperties("", 0));
+					classes.put(sg.getSubject().getId(), new ClassProperties());
 
 				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
 						if(!classes.containsKey(value.getId()))
-							classes.put(value.getId(), new ClassProperties("", 0));
+							classes.put(value.getId(), new ClassProperties());
 
 						if(!subclasses.containsKey(sg.getSubject().getId()))
 							subclasses.put(sg.getSubject().getId(), new ArrayList<String>());
@@ -258,7 +276,13 @@ public class Processor implements EntityDocumentProcessor {
 			}			
 		}
 		else if (operation == Operation.ENHANCE_FILTER) {
-			if(classes.containsKey(itemDocument.getEntityId().getId())) {
+			Boolean isClass = false, isInstance = false;
+			if(classes.containsKey(itemDocument.getEntityId().getId()))
+				isClass = true;
+			else if (instances.containsKey(itemDocument.getEntityId().getId()))
+				isInstance = true;
+
+			if(isClass || isInstance) {
 
 				//Add english label; if not exists, add the first available.
 				String label = itemDocument.findLabel("en");
@@ -271,14 +295,23 @@ public class Processor implements EntityDocumentProcessor {
 				}
 				label = label.replace(separator, " ");
 
-				//filter category classes
-				if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":"))) {
-					classes.remove(itemDocument.getEntityId().getId());
-					subclasses.remove(itemDocument.getEntityId().getId());
-					return;
-				}							
+				if (isClass)
+					classes.get(itemDocument.getEntityId().getId()).label = label;
+				else if (isInstance)
+					instances.put(itemDocument.getEntityId().getId(), label);
+			}
 
-				classes.get(itemDocument.getEntityId().getId()).label = label;
+			if(isClass) {				
+				//filter category classes
+				if (filterCategories) {
+					String label = classes.get(itemDocument.getEntityId().getId()).label;
+					if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
+
+						classes.remove(itemDocument.getEntityId().getId());
+						subclasses.remove(itemDocument.getEntityId().getId());
+						return;
+					}
+				}							
 
 				//filter classes from Biological DBs
 				if (filterBioDBs) {
@@ -320,7 +353,7 @@ public class Processor implements EntityDocumentProcessor {
 			}
 		}
 		else if (operation == Operation.WRITE) {
-			if(classes.containsKey(itemDocument.getEntityId().getId()))
+			if(classes.containsKey(itemDocument.getEntityId().getId()) || instances.containsKey(itemDocument.getEntityId().getId()))
 				jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 		else if (operation == Operation.PROVENANCE) {
