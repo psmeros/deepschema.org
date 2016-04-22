@@ -56,7 +56,7 @@ object readGraph {
 
   def firstLevelStatistics {
     //vertices = classes, edges = subclass relations
-    //println("Classes: " + graph.numVertices, "Subclasses: " +  graph.numEdges, "Instances: "+ graph.vertices.map{case ((_, vertex)) => vertex.numOfInstances}.reduce(_ + _))
+    println("Classes: " + graph.numVertices, "Subclasses: " + graph.numEdges)
 
     println("Classes without label: " + graph.vertices.filter { case (_, vertex) => vertex.label.equals("No Label") }.count())
     println("Classes without instanses: " + graph.vertices.filter { case (_, vertex) => vertex.instances.size.equals(0) }.count())
@@ -87,16 +87,12 @@ object readGraph {
     }
     metadata1.close()
 
-    //val metadata2 = new PrintWriter(new File("results/subgraphs.tsv" ))
-    //subgraphs.collect.foreach{ case (graphId, vertices) => 
-    //metadata2.write("G" + graphId + separator + vertices.size + separator + vertices.map{ case (_, vertex) => vertex.numOfInstances}.sum + newline)}
-    //metadata2.close()
-  }
-
-  def instancesStatistics {
-    //val writer = new PrintWriter(new File("results/instancesPerClass.tsv" ))
-    //graph.vertices.collect.sortBy{case (id, vertex) => vertex.numOfInstances}(Ordering[Int].reverse).foreach{case (_, vertex) => writer.write(vertex.label + separator + vertex.numOfInstances + newline)}
-    //writer.close
+    val metadata2 = new PrintWriter(new File("results/subgraphs.tsv"))
+    subgraphs.collect.foreach {
+      case (graphId, vertices) =>
+        metadata2.write("G" + graphId + separator + vertices.size)
+    }
+    metadata2.close()
   }
 
   def extractSubgraph(id: Int) {
@@ -107,7 +103,7 @@ object readGraph {
     writer1.close()
 
     val writer2 = new PrintWriter(new File("results/Graph" + id + "_Vertices.tsv"))
-    //subgraph.vertices.collect.foreach{case (id, vertex) => writer2.write(id + separator + vertex.label + separator + vertex.numOfInstances + separator + vertex.isRoot + newline)}
+    subgraph.vertices.collect.foreach { case (id, vertex) => writer2.write(id + separator + vertex.label + newline) }
     subgraph.vertices.collect.foreach { case (id, vertex) => writer2.write(id + newline) }
     writer2.close()
 
@@ -119,7 +115,7 @@ object readGraph {
   def computeNumOfInstances {
     val writer = new PrintWriter(new File("results/numOfInstances.tsv"))
     var visited: Map[VertexId, Set[VertexId]] = Map.empty
-    graph.collectNeighborIds(EdgeDirection.Out).filter{case (_, neighbors) => neighbors.isEmpty}.collect.foreach{case (id, _) => computeNumOfInstances(id, visited, writer)}
+    graph.collectNeighborIds(EdgeDirection.Out).filter { case (_, neighbors) => neighbors.isEmpty }.collect.foreach { case (id, _) => computeNumOfInstances(id, visited, writer) }
     writer.close()
   }
 
@@ -161,7 +157,6 @@ object readGraph {
       //firstLevelStatistics
       //hierarchyStatistics
       //subgraphsStatistics
-      //instancesStatistics
       //extractSubgraph(3)
       computeNumOfInstances
     }
