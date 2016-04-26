@@ -25,14 +25,20 @@ object readGraph {
   val graphFromEdges = false
 
   //remove classes without label
-  val removeClassesWithoutLabel = false
+  val removeClassesWithoutLabel = true
+
+  //reads instances file
+  val readInstances = false
 
   //read from tsv files  
   lazy val verticesRDD = {
     lazy val classesRDD = sc.textFile(classesFile).map(line => line.split(separator)).map { case Array(id, label) => (id.toString.toLong, Vertex(label.toString, null, false)); case _ => (0L, Vertex("", null, false)) }
     lazy val instancesRDD = sc.textFile(instancesFile).map(line => line.split(separator)).map(line => (line(1).toString.toLong, line(0).toString.toLong))
 
-    classesRDD.leftOuterJoin(instancesRDD).map { case (id, (vertex, instances)) => ((id, vertex), instances.getOrElse(-1L)) }.groupByKey.map { case ((id, vertex), instances) => (id, Vertex(vertex.label, instances.filterNot { f => f == -1L }.toList, vertex.isRoot)) }
+    if (readInstances)
+      classesRDD.leftOuterJoin(instancesRDD).map { case (id, (vertex, instances)) => ((id, vertex), instances.getOrElse(-1L)) }.groupByKey.map { case ((id, vertex), instances) => (id, Vertex(vertex.label, instances.filterNot { f => f == -1L }.toList, vertex.isRoot)) }
+    else
+      classesRDD
   }
   lazy val edgesRDD = sc.textFile(subclassOfRelationsFile).map(line => line.split(separator)).map(line => Edge(line(0).toString.toLong, line(1).toString.toLong, "subclassOf"))
 
@@ -147,6 +153,27 @@ object readGraph {
     }
   }
 
+  def extractRandomEdges(num: Int) {
+    val writer = new PrintWriter(new File("results/"+num+"randomEdges.tsv"))
+    writer.write("srcURL" + separator + "srcLabel" + separator + "relation" + separator + "dstURL" + separator + "dstLabel" + newline)
+
+    for (i <- 1 to num) {
+      val randomEdge = {
+        var randomEdges: Array[Edge[String]] = null
+        do {
+          var randomVertex = graph.pickRandomVertex
+          randomEdges = graph.edges.filter { edge => edge.srcId == randomVertex }.collect()
+        } while (randomEdges.isEmpty)
+        randomEdges(0)
+      }
+
+      val (srcId, srcVertex) = graph.vertices.filter { case (id, _) => id == randomEdge.srcId }.first
+      val (dstId, dstVertex) = graph.vertices.filter { case (id, _) => id == randomEdge.dstId }.first
+      writer.write("http://www.wikidata.org/wiki/Q" + srcId + separator + srcVertex.label + separator + randomEdge.attr + separator + "http://www.wikidata.org/wiki/Q" + dstId + separator + dstVertex.label + newline)
+    }
+    writer.close()
+  }
+
   def main(args: Array[String]) {
 
     if (args.length == 3) {
@@ -158,7 +185,8 @@ object readGraph {
       //hierarchyStatistics
       //subgraphsStatistics
       //extractSubgraph(3)
-      computeNumOfInstances
+      //computeNumOfInstances
+      extractRandomEdges(1000)
     }
   }
 }
