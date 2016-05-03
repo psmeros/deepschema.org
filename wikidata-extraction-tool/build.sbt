@@ -3,7 +3,7 @@ lazy val root = (project in file(".")).
 	name := "Wikidata Extraction Tool",
 	version := "0.0.1-SNAPSHOT",
 	organization := "ch.epfl.lsir",
-	javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+	autoScalaLibrary := false,
 
     libraryDependencies += "org.wikidata.wdtk" % "wdtk-datamodel" % "0.6.0",
     libraryDependencies += "org.wikidata.wdtk" % "wdtk-dumpfiles" % "0.6.0",
