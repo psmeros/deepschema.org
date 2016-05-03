@@ -7,6 +7,7 @@ import java.io._
 import scala.util.Try
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
+import scala.collection.mutable.MutableList
 
 object readGraph {
 
@@ -32,7 +33,7 @@ object readGraph {
 
   //read from tsv files  
   lazy val verticesRDD = {
-    lazy val classesRDD = sc.textFile(classesFile).map(line => line.split(separator)).map { case Array(id, label) => (id.toString.toLong, Vertex(label.toString, null, false)); case _ => (0L, Vertex("", null, false)) }
+    lazy val classesRDD = sc.textFile(classesFile).map(line => line.split(separator)).map { case Array(id, label) => (id.toString.toLong, Vertex(label.toString, null, false)); case _ => (0L, Vertex("No label", null, false)) }
     lazy val instancesRDD = sc.textFile(instancesFile).map(line => line.split(separator)).map(line => (line(1).toString.toLong, line(0).toString.toLong))
 
     if (readInstances)
@@ -174,6 +175,33 @@ object readGraph {
     writer.close()
   }
 
+  
+  def computeAvgDepth {
+     
+    var paths: MutableList[Int] = MutableList.empty[Int]
+    graph.collectNeighborIds(EdgeDirection.Out).filter { case (_, neighbors) => neighbors.isEmpty }.collect.foreach { case (id, _) => computeAvgDepth(id, Set.empty[VertexId], 0, paths) }
+    
+    println(paths.sum)
+    println(paths.size)
+  }
+  
+  def computeAvgDepth(frontier: VertexId, visited: Set[VertexId], depth: Int, paths: MutableList[Int]) {
+    visited += frontier
+
+      val subclasses = graph.edges.filter { edge => edge.dstId == frontier }.map { edge => edge.srcId }.collect.iterator
+
+      if (!subclasses.hasNext) {
+        paths += depth
+      }
+      
+      while (subclasses.hasNext) {
+        val subclass = subclasses.next
+        if (!visited.contains(subclass)) {
+            computeAvgDepth(subclass, visited, depth + 1, paths)
+        }
+      }
+  }
+  
   def main(args: Array[String]) {
 
     if (args.length == 3) {
@@ -186,7 +214,8 @@ object readGraph {
       //subgraphsStatistics
       //extractSubgraph(3)
       //computeNumOfInstances
-      extractRandomEdges(1000)
+      //extractRandomEdges(1000)
+      computeAvgDepth
     }
   }
 }
