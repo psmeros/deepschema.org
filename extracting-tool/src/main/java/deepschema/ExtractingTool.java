@@ -79,9 +79,9 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	Map <String, String> instances;
 
 	//Parameters
-	Output output = Output.JSON;
+	Output output = Output.TSV;
 
-	Boolean useCache = true;
+	Boolean useCache = false;
 
 	Boolean filterCategories = false;
 

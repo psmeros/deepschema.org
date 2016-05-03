@@ -11,7 +11,7 @@ import scala.collection.mutable.MutableList
 import org.apache.spark.graphx.Graph.graphToGraphOps
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 
-object readGraph {
+object ProcessingTool {
 
   var classesFile, subclassOfRelationsFile, instancesFile: String = null
 
