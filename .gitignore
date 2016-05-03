@@ -54,3 +54,10 @@ results/
 *.tmp
 .DS_Store
 Thumbs.db
+=======
+.*
+!.gitignore
+project/
+target/
+bin/
+results/
