@@ -29,7 +29,6 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -42,7 +41,6 @@ import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
 import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
-import org.wikidata.wdtk.datamodel.interfaces.MonolingualTextValue;
 import org.wikidata.wdtk.datamodel.interfaces.PropertyDocument;
 import org.wikidata.wdtk.datamodel.interfaces.Reference;
 import org.wikidata.wdtk.datamodel.interfaces.Snak;
@@ -81,9 +79,9 @@ public class Processor implements EntityDocumentProcessor {
 	Map <String, String> instances;
 
 	//Parameters
-	Output output = Output.TSV;
+	Output output = Output.JSON;
 
-	Boolean useCache = false;
+	Boolean useCache = true;
 
 	Boolean filterCategories = false;
 
@@ -214,14 +212,14 @@ public class Processor implements EntityDocumentProcessor {
 				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
 				classes = (Map<String, ClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
 				subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
-				instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
+				//instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
 				objectInputStream.close();
 			}
 			case "write" : {				
 				ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
 				objectOutputStream.writeObject(classes);
 				objectOutputStream.writeObject(subclasses);
-				objectOutputStream.writeObject(instances);
+				//objectOutputStream.writeObject(instances);
 				objectOutputStream.flush();
 				objectOutputStream.close();
 			}
@@ -277,9 +275,11 @@ public class Processor implements EntityDocumentProcessor {
 		}
 		else if (operation == Operation.ENHANCE_FILTER) {
 			Boolean isClass = false, isInstance = false;
-			if(classes.containsKey(itemDocument.getEntityId().getId()))
+			String currentId = itemDocument.getEntityId().getId();
+			
+			if(classes.containsKey(currentId))
 				isClass = true;
-			else if (instances.containsKey(itemDocument.getEntityId().getId()))
+			else if (instances.containsKey(currentId))
 				isInstance = true;
 
 			if(isClass || isInstance) {
@@ -287,28 +287,37 @@ public class Processor implements EntityDocumentProcessor {
 				//Add english label; if not exists, add the first available.
 				String label = itemDocument.findLabel("en");
 				if (label == null) {
-					Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
-					if (otherlabels.isEmpty())
-						label = "No Label";
-					else
-						label = otherlabels.iterator().next().getText();
+					//Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
+					//if (otherlabels.isEmpty())
+					//	label = "No Label";
+					//else
+					//	label = otherlabels.iterator().next().getText();
+					
+					if (isClass) {
+						classes.remove(currentId);
+						subclasses.remove(currentId);
+						return;
+					}
+					else if (isInstance)
+						instances.remove(currentId);
+						return;
 				}
 				label = label.replace(separator, " ");
 
 				if (isClass)
-					classes.get(itemDocument.getEntityId().getId()).label = label;
+					classes.get(currentId).label = label;
 				else if (isInstance)
-					instances.put(itemDocument.getEntityId().getId(), label);
+					instances.put(currentId, label);
 			}
 
 			if(isClass) {				
 				//filter category classes
 				if (filterCategories) {
-					String label = classes.get(itemDocument.getEntityId().getId()).label;
+					String label = classes.get(currentId).label;
 					if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
 
-						classes.remove(itemDocument.getEntityId().getId());
-						subclasses.remove(itemDocument.getEntityId().getId());
+						classes.remove(currentId);
+						subclasses.remove(currentId);
 						return;
 					}
 				}							
@@ -340,8 +349,8 @@ public class Processor implements EntityDocumentProcessor {
 												(pid.equals("P248") && vid.contains("Q20976936")) || // HomoloGene build68
 												(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
 												(pid.equals("P248") && vid.contains("Q21234191")) ) { // NuDat
-											classes.remove(itemDocument.getEntityId().getId());
-											subclasses.remove(itemDocument.getEntityId().getId());
+											classes.remove(currentId);
+											subclasses.remove(currentId);
 											return;
 										}
 									}
@@ -353,7 +362,7 @@ public class Processor implements EntityDocumentProcessor {
 			}
 		}
 		else if (operation == Operation.WRITE) {
-			if(classes.containsKey(itemDocument.getEntityId().getId()) || instances.containsKey(itemDocument.getEntityId().getId()))
+			if(classes.containsKey(itemDocument.getEntityId().getId()))
 				jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 		else if (operation == Operation.PROVENANCE) {
