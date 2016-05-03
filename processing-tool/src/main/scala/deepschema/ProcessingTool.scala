@@ -1,13 +1,15 @@
+package deepschema
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.graphx._
-import org.apache.spark.rdd.RDD
 import java.io._
-import scala.util.Try
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 import scala.collection.mutable.MutableList
+import org.apache.spark.graphx.Graph.graphToGraphOps
+import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 
 object readGraph {
 

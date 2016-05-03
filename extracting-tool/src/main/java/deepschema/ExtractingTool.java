@@ -1,4 +1,4 @@
-package taxonomy;
+package deepschema;
 
 /*
  * #%L
@@ -57,7 +57,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  * @author Panayiotis Smeros
  *
  */
-public class Processor implements EntityDocumentProcessor {
+public class ExtractingTool implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream;
 
@@ -93,7 +93,7 @@ public class Processor implements EntityDocumentProcessor {
 	 *
 	 * @throws IOException (if there is a problem opening the output file(s))
 	 */
-	public Processor() throws IOException {
+	public ExtractingTool() throws IOException {
 
 		this.classes = new HashMap<>();
 		this.subclasses = new HashMap<>();
@@ -136,8 +136,7 @@ public class Processor implements EntityDocumentProcessor {
 	public static void main(String[] args) throws IOException {
 		ExampleHelpers.configureLogging();
 
-		Processor taxonomyProcessor = new Processor();
-		taxonomyProcessor.init();
+		new ExtractingTool().init();
 	}	
 
 	/**

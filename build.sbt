@@ -1,12 +1,14 @@
 lazy val commonSettings = Seq(
 	version := "0.0.1-SNAPSHOT",
-	organization := "ch.epfl.lsir"	
+	organization := "ch.epfl.lsir",
+	scalaVersion := "2.11.7"	
 )
 
 
-lazy val extracting = (project in file("extracting-tool")).
-  settings(
-	name := "Wikidata Extraction Tool",
+lazy val extracting = (project in file("extracting-tool"))
+.settings(commonSettings: _*)
+.settings(
+	name := "extracting tool",
 
     libraryDependencies += "org.wikidata.wdtk" % "wdtk-datamodel" % "0.6.0",
     libraryDependencies += "org.wikidata.wdtk" % "wdtk-dumpfiles" % "0.6.0",
@@ -19,10 +21,11 @@ lazy val extracting = (project in file("extracting-tool")).
 
 
 
-lazy val processing = (project in file("processing-tool")).
-  settings(
-	name := "Taxonomy Analyzer",
-	scalaVersion := "2.11.7",
+lazy val processing = (project in file("processing-tool"))
+.settings(commonSettings: _*)
+.settings(
+	name := "processing tool",
+	
 	crossScalaVersions := Seq("2.10.5", "2.11.7"),
 	libraryDependencies += "org.apache.spark" %% "spark-core" % "1.6.0",
 	libraryDependencies += "org.apache.spark" %% "spark-sql" % "1.6.0",
