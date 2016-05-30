@@ -157,7 +157,7 @@ object ProcessingTool {
   }
 
   def extractRandomEdges(num: Int) {
-    val writer = new PrintWriter(new File("results/"+num+"randomEdges.tsv"))
+    val writer = new PrintWriter(new File("results/" + num + "randomEdges.tsv"))
     writer.write("srcURL" + separator + "srcLabel" + separator + "relation" + separator + "dstURL" + separator + "dstLabel" + newline)
 
     for (i <- 1 to num) {
@@ -177,33 +177,67 @@ object ProcessingTool {
     writer.close()
   }
 
-  
   def computeAvgDepth {
-     
+
     var paths: MutableList[Int] = MutableList.empty[Int]
     graph.collectNeighborIds(EdgeDirection.Out).filter { case (_, neighbors) => neighbors.isEmpty }.collect.foreach { case (id, _) => computeAvgDepth(id, Set.empty[VertexId], 0, paths) }
-    
+
     println(paths.sum)
     println(paths.size)
   }
-  
+
   def computeAvgDepth(frontier: VertexId, visited: Set[VertexId], depth: Int, paths: MutableList[Int]) {
+
     visited += frontier
+
+    val subclasses = graph.edges.filter { edge => edge.dstId == frontier }.map { edge => edge.srcId }.collect.iterator
+
+    if (!subclasses.hasNext) {
+      paths += depth
+    }
+
+    while (subclasses.hasNext) {
+      val subclass = subclasses.next
+      if (!visited.contains(subclass)) {
+        computeAvgDepth(subclass, visited, depth + 1, paths)
+      }
+    }
+  }
+
+  def computeHarmonicCentrality {
+    val writer = new PrintWriter(new File("results/harmonicCentrality.tsv"))
+    var visited: Map[VertexId, Double] = Map.empty
+    graph.collectNeighborIds(EdgeDirection.Out).filter { case (_, neighbors) => neighbors.isEmpty }.collect.foreach { case (id, _) => computeHarmonicCentrality(id, visited, writer) }
+    writer.close()
+  }
+
+  def computeHarmonicCentrality(frontier: VertexId, visited: Map[VertexId, Double], writer: PrintWriter) {
+    try {
+
+      visited += (frontier -> 0.0)
 
       val subclasses = graph.edges.filter { edge => edge.dstId == frontier }.map { edge => edge.srcId }.collect.iterator
 
-      if (!subclasses.hasNext) {
-        paths += depth
-      }
-      
+      var harmonicCentrality = 0.0
       while (subclasses.hasNext) {
         val subclass = subclasses.next
-        if (!visited.contains(subclass)) {
-            computeAvgDepth(subclass, visited, depth + 1, paths)
+        if (subclass != frontier) {
+          if (!visited.contains(subclass))
+            computeHarmonicCentrality(subclass, visited, writer)
+          harmonicCentrality += visited.getOrElse(subclass, 0.0) / 2.0 + 1.0
         }
       }
+
+      visited += (frontier -> harmonicCentrality)
+
+      val (id, vertex) = graph.vertices.filter { case (id, _) => id == frontier }.first
+      writer.write(id + separator + vertex.label + separator + harmonicCentrality + newline)
+
+    } catch {
+      case _: Throwable => writer.close()
+    }
   }
-  
+
   def main(args: Array[String]) {
 
     if (args.length == 3) {
@@ -217,7 +251,8 @@ object ProcessingTool {
       //extractSubgraph(3)
       //computeNumOfInstances
       //extractRandomEdges(1000)
-      computeAvgDepth
+      //computeAvgDepth
+      computeHarmonicCentrality
     }
   }
 }

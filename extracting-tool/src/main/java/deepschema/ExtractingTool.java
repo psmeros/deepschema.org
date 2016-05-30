@@ -31,10 +31,12 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
@@ -50,8 +52,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 
 /**
- * This example illustrates how to create a taxonomy serialization of the
- * data found in a dump.
+ * This example illustrates how to create a taxonomy serialization of the data found in a dump.
  *
  * @author Markus Kroetzsch
  * @author Panayiotis Smeros
@@ -61,24 +62,37 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream;
 
-	enum Operation {READ, ENHANCE_FILTER, WRITE, PROVENANCE}
+	enum Operation {
+		READ, ENHANCE_FILTER, WRITE, PROVENANCE
+	}
+
 	public Operation operation;
 
-	enum Output {JSON, TSV, TXT}
+	enum Output {
+		JSON, TSV, TXT
+	}
+
 	final String separator = "\t";
 
 	@SuppressWarnings("serial")
-	static class ClassProperties implements Serializable {String label; List <String> instances; public ClassProperties () {this.label = ""; this.instances = new ArrayList<String>();}}
+	static class ClassProperties implements Serializable {
+		String label;
+		Set<String> instances;
 
+		public ClassProperties() {
+			this.label = "";
+			this.instances = new HashSet<String>();
+		}
+	}
+
+	Map<String, ClassProperties> classes;
+	Map<String, List<String>> subclasses;
+	Map<String, String> instances;
 
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
 
-	Map <String, ClassProperties> classes;
-	Map <String, List <String>> subclasses;
-	Map <String, String> instances;
-
-	//Parameters
+	// Parameters
 	Output output = Output.TSV;
 
 	Boolean useCache = false;
@@ -86,7 +100,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	Boolean filterCategories = false;
 
 	Boolean filterBioDBs = true;
-
 
 	/**
 	 * Constructor. Opens the file that we want to write to.
@@ -99,7 +112,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		this.subclasses = new HashMap<>();
 		this.instances = new HashMap<>();
 
-		if (output == Output.TSV)	{
+		if (output == Output.TSV) {
 			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classes.tsv.gz")));
 			this.subclassOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("subclassOfRelations.tsv.gz")));
 			this.instancesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("instances.tsv.gz")));
@@ -108,7 +121,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		else if (output == Output.JSON) {
 			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classesAndInstances.json.gz")));
 
-			//DataModel
+			// DataModel
 			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
 			// Do not copy references.
 			this.datamodelConverter.setOptionDeepCopyReferences(false);
@@ -137,12 +150,12 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		ExampleHelpers.configureLogging();
 
 		new ExtractingTool().init();
-	}	
+	}
 
 	/**
 	 * Initializes the procedure.
-	 */		
-	public void init() {	
+	 */
+	public void init() {
 		if (!useCache) {
 			operation = Operation.READ;
 			ExampleHelpers.processEntitiesFromWikidataDump(this);
@@ -159,23 +172,23 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 	/**
 	 * Writes output to the corresponding files.
-	 */		
-	public void writeOutput() {	
+	 */
+	void writeOutput() {
 		try {
 			if (output == Output.TSV) {
 				for (Entry<String, ClassProperties> entry : classes.entrySet())
-					classesStream.write((entry.getKey().substring(1)+separator+entry.getValue().label+"\n").getBytes());
+					classesStream.write((entry.getKey().substring(1) + separator + entry.getValue().label + "\n").getBytes());
 
-				for (Entry<String, List <String>> entry : subclasses.entrySet())
+				for (Entry<String, List<String>> entry : subclasses.entrySet())
 					for (String value : entry.getValue())
-						subclassOfRelationsStream.write((entry.getKey().substring(1)+separator+value.substring(1)+"\n").getBytes());
+						subclassOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
 
 				for (Entry<String, String> entry : instances.entrySet())
-					instancesStream.write((entry.getKey().substring(1)+separator+entry.getValue()+"\n").getBytes());
+					instancesStream.write((entry.getKey().substring(1) + separator + entry.getValue() + "\n").getBytes());
 
 				for (Entry<String, ClassProperties> entry : classes.entrySet())
 					for (String value : entry.getValue().instances)
-						instanceOfRelationsStream.write((value.substring(1)+separator+entry.getKey().substring(1)+"\n").getBytes());
+						instanceOfRelationsStream.write((value.substring(1) + separator + entry.getKey().substring(1) + "\n").getBytes());
 
 				classesStream.close();
 				subclassOfRelationsStream.close();
@@ -186,13 +199,14 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				operation = Operation.WRITE;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
 				jsonStream.close();
-			}			
+			}
 			else if (output == Output.TXT) {
 				operation = Operation.PROVENANCE;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
 				txtStream.close();
 			}
-		} catch (IOException e) {
+		}
+		catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -200,34 +214,35 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	/**
 	 * Caches classes and subclasses to file.
 	 * 
-	 * @param operation: "read" or "write"
-	 */	
+	 * @param operation : "read" or "write"
+	 */
 	@SuppressWarnings("unchecked")
-	public void cache(String action) {		
-		final String cacheFile=".cache";
+	void cache(String action) {
+		final String cacheFile = ".cache";
 		try {
-			switch (action) {	
-			case "read" : {
-				ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-				classes = (Map<String, ClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
-				subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
-				//instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
-				objectInputStream.close();
+			switch (action) {
+				case "read": {
+					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
+					classes = (Map<String, ClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
+					subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
+					// instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
+					objectInputStream.close();
+				}
+				case "write": {
+					ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
+					objectOutputStream.writeObject(classes);
+					objectOutputStream.writeObject(subclasses);
+					// objectOutputStream.writeObject(instances);
+					objectOutputStream.flush();
+					objectOutputStream.close();
+				}
 			}
-			case "write" : {				
-				ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
-				objectOutputStream.writeObject(classes);
-				objectOutputStream.writeObject(subclasses);
-				//objectOutputStream.writeObject(instances);
-				objectOutputStream.flush();
-				objectOutputStream.close();
-			}
-			}
-		} catch (ClassNotFoundException | IOException e) {
+		}
+		catch (ClassNotFoundException | IOException e) {
 			System.err.println("Problem while reading/writing from/to cache.");
 			e.printStackTrace();
 		}
-	}	
+	}
 
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
@@ -235,63 +250,63 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 			StatementGroup sg = null;
 
-			//instanceOf(I, C) => Class(C) #RDFS
+			// instanceOf(I, C) => Class(C) #RDFS
 			sg = itemDocument.findStatementGroup("P31");
 
 			if (sg != null) {
-				for (Statement s : sg.getStatements()) {			
+				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
-						if(!classes.containsKey(value.getId()))
+						if (!classes.containsKey(value.getId()))
 							classes.put(value.getId(), new ClassProperties());
 						classes.get(value.getId()).instances.add(sg.getSubject().getId());
 
-						if(!instances.containsKey(sg.getSubject().getId()))
+						if (!instances.containsKey(sg.getSubject().getId()))
 							instances.put(sg.getSubject().getId(), "");
 					}
-				}				
+				}
 			}
 
-			//subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
+			// subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
 			sg = itemDocument.findStatementGroup("P279");
 
 			if (sg != null) {
-				if(!classes.containsKey(sg.getSubject().getId()))
+				if (!classes.containsKey(sg.getSubject().getId()))
 					classes.put(sg.getSubject().getId(), new ClassProperties());
 
 				for (Statement s : sg.getStatements()) {
 					ItemIdValue value = (ItemIdValue) s.getValue();
 					if (value != null) {
-						if(!classes.containsKey(value.getId()))
+						if (!classes.containsKey(value.getId()))
 							classes.put(value.getId(), new ClassProperties());
 
-						if(!subclasses.containsKey(sg.getSubject().getId()))
+						if (!subclasses.containsKey(sg.getSubject().getId()))
 							subclasses.put(sg.getSubject().getId(), new ArrayList<String>());
 						subclasses.get(sg.getSubject().getId()).add(value.getId());
 					}
-				}				
-			}			
+				}
+			}
 		}
 		else if (operation == Operation.ENHANCE_FILTER) {
 			Boolean isClass = false, isInstance = false;
 			String currentId = itemDocument.getEntityId().getId();
-			
-			if(classes.containsKey(currentId))
+
+			if (classes.containsKey(currentId))
 				isClass = true;
 			else if (instances.containsKey(currentId))
 				isInstance = true;
 
-			if(isClass || isInstance) {
+			if (isClass || isInstance) {
 
-				//Add english label; if not exists, add the first available.
+				// Add english label; if not exists, add the first available.
 				String label = itemDocument.findLabel("en");
 				if (label == null) {
-					//Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
-					//if (otherlabels.isEmpty())
-					//	label = "No Label";
-					//else
-					//	label = otherlabels.iterator().next().getText();
-					
+					// Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
+					// if (otherlabels.isEmpty())
+					// label = "No Label";
+					// else
+					// label = otherlabels.iterator().next().getText();
+
 					if (isClass) {
 						classes.remove(currentId);
 						subclasses.remove(currentId);
@@ -299,7 +314,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 					}
 					else if (isInstance)
 						instances.remove(currentId);
-						return;
+					return;
 				}
 				label = label.replace(separator, " ");
 
@@ -309,8 +324,8 @@ public class ExtractingTool implements EntityDocumentProcessor {
 					instances.put(currentId, label);
 			}
 
-			if(isClass) {				
-				//filter category classes
+			if (isClass) {
+				// filter category classes
 				if (filterCategories) {
 					String label = classes.get(currentId).label;
 					if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
@@ -319,67 +334,68 @@ public class ExtractingTool implements EntityDocumentProcessor {
 						subclasses.remove(currentId);
 						return;
 					}
-				}							
+				}
 
-				//filter classes from Biological DBs
+				// filter classes from Biological DBs
 				if (filterBioDBs) {
 					for (StatementGroup sg : itemDocument.getStatementGroups()) {
 						for (Statement s : sg) {
-							for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
+							for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
 								for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
 									Snak snak = sn.next();
 									if (snak.getValue() != null) {
 										String pid = snak.getPropertyId().getId();
 										String vid = snak.getValue().toString();
 										if ((pid.equals("P143") && vid.contains("Q20641742")) || // NCBI Gene
-												(pid.equals("P248") && vid.contains("Q20950174")) || // NCBI homo sapiens annotation release 107
-												(pid.equals("P143") && vid.contains("Q905695")) || // UniProt
-												(pid.equals("P248") && vid.contains("Q20973051")) || // NCBI mus musculus annotation release 105
-												(pid.equals("P248") && vid.contains("Q2629752")) || // Swiss-Prot 
-												(pid.equals("P248") && vid.contains("Q905695")) || // UniProt
-												(pid.equals("P248") && vid.contains("Q20641742")) || // NCBI Gene
-												(pid.equals("P143") && vid.contains("Q1344256")) || // Ensembl
-												(pid.equals("P248") && vid.contains("Q21996330")) || // Ensembl Release 83
-												(pid.equals("P248") && vid.contains("Q135085")) || // Gene Ontology
-												(pid.equals("P143") && vid.contains("Q22230760")) || // Ontology Lookup Service
-												(pid.equals("P143") && vid.contains("Q1345229")) || // Entrez
-												(pid.equals("P248") && vid.contains("Q5282129")) || // Disease Ontology
-												(pid.equals("P143") && vid.contains("Q468215")) || // HomoloGene
-												(pid.equals("P248") && vid.contains("Q20976936")) || // HomoloGene build68
-												(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
-												(pid.equals("P248") && vid.contains("Q21234191")) ) { // NuDat
+										(pid.equals("P248") && vid.contains("Q20950174")) || // NCBI homo sapiens annotation release 107
+										(pid.equals("P143") && vid.contains("Q905695")) || // UniProt
+										(pid.equals("P248") && vid.contains("Q20973051")) || // NCBI mus musculus annotation release 105
+										(pid.equals("P248") && vid.contains("Q2629752")) || // Swiss-Prot
+										(pid.equals("P248") && vid.contains("Q905695")) || // UniProt
+										(pid.equals("P248") && vid.contains("Q20641742")) || // NCBI Gene
+										(pid.equals("P143") && vid.contains("Q1344256")) || // Ensembl
+										(pid.equals("P248") && vid.contains("Q21996330")) || // Ensembl Release 83
+										(pid.equals("P248") && vid.contains("Q135085")) || // Gene Ontology
+										(pid.equals("P143") && vid.contains("Q22230760")) || // Ontology Lookup Service
+										(pid.equals("P143") && vid.contains("Q1345229")) || // Entrez
+										(pid.equals("P248") && vid.contains("Q5282129")) || // Disease Ontology
+										(pid.equals("P143") && vid.contains("Q468215")) || // HomoloGene
+										(pid.equals("P248") && vid.contains("Q20976936")) || // HomoloGene build68
+										(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
+										(pid.equals("P248") && vid.contains("Q21234191"))) { // NuDat
 											classes.remove(currentId);
 											subclasses.remove(currentId);
 											return;
 										}
 									}
-								}	
+								}
 							}
 						}
-					}					
+					}
 				}
 			}
 		}
 		else if (operation == Operation.WRITE) {
-			if(classes.containsKey(itemDocument.getEntityId().getId()))
+			if (classes.containsKey(itemDocument.getEntityId().getId()))
 				jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 		else if (operation == Operation.PROVENANCE) {
 
-			if(classes.containsKey(itemDocument.getEntityId().getId())) {
+			if (classes.containsKey(itemDocument.getEntityId().getId())) {
 
 				for (StatementGroup sg : itemDocument.getStatementGroups()) {
 					for (Statement s : sg) {
-						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {		
+						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
 							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
 								try {
 									Snak snak = sn.next();
 									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248"))
 										txtStream.write((snak + "\n").getBytes());
-								} catch (IOException e) {
+								}
+								catch (IOException e) {
 									e.printStackTrace();
 								}
-							}	
+							}
 						}
 					}
 				}
@@ -389,6 +405,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 	@Override
 	public void processPropertyDocument(PropertyDocument propertyDocument) {
-		//Do not serialize any properties.
+		// Do not serialize any properties.
 	}
 }
