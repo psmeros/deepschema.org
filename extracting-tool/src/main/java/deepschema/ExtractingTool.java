@@ -39,6 +39,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.openrdf.rio.RDFFormat;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
@@ -50,6 +51,9 @@ import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
+import org.wikidata.wdtk.dumpfiles.DumpProcessingController;
+import org.wikidata.wdtk.rdf.PropertyRegister;
+import org.wikidata.wdtk.rdf.RdfSerializer;
 
 /**
  * This example illustrates how to create a taxonomy serialization of the data found in a dump.
@@ -60,7 +64,7 @@ import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
  */
 public class ExtractingTool implements EntityDocumentProcessor {
 
-	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream;
+	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream, rdfStream;
 
 	enum Operation {
 		READ, ENHANCE_FILTER, WRITE, PROVENANCE
@@ -69,7 +73,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	public Operation operation;
 
 	enum Output {
-		JSON, TSV, TXT
+		JSON, RDF, TSV, TXT
 	}
 
 	final String separator = "\t";
@@ -91,9 +95,10 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 	DatamodelConverter datamodelConverter;
 	JsonSerializer jsonSerializer;
+	RdfSerializer rdfSerializer;
 
 	// Parameters
-	Output output = Output.TSV;
+	Output output = Output.RDF;
 
 	Boolean useCache = false;
 
@@ -134,6 +139,25 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 			this.jsonSerializer = new JsonSerializer(jsonStream);
 			this.jsonSerializer.open();
+		}
+		else if (output == Output.RDF) {
+			this.rdfStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classesAndInstances.nt.gz")));
+
+			// DataModel
+			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
+			// Do not copy references.
+			this.datamodelConverter.setOptionDeepCopyReferences(false);
+			// Only copy English labels, descriptions, and aliases.
+			this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
+			// Copy statements of all the properties.
+			this.datamodelConverter.setOptionPropertyFilter(null);
+			// Do not copy sitelinks.
+			this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
+			
+			rdfSerializer = new RdfSerializer(RDFFormat.NTRIPLES, rdfStream, new DumpProcessingController("wikidatawiki").getSitesInformation(), PropertyRegister.getWikidataPropertyRegister());
+			// Serialize simple statements (and nothing else) for all items
+			rdfSerializer.setTasks(RdfSerializer.TASK_ITEMS | RdfSerializer.TASK_SIMPLE_STATEMENTS);
+			rdfSerializer.open();
 		}
 		else if (output == Output.TXT) {
 			this.txtStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("output.txt.gz")));
@@ -200,6 +224,11 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
 				jsonStream.close();
 			}
+			else if (output == Output.RDF) {
+				operation = Operation.WRITE;
+				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				rdfStream.close();
+			}			
 			else if (output == Output.TXT) {
 				operation = Operation.PROVENANCE;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
@@ -377,7 +406,10 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		}
 		else if (operation == Operation.WRITE) {
 			if (classes.containsKey(itemDocument.getEntityId().getId()))
-				jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+				if (output == Output.JSON)
+					jsonSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
+				else if (output == Output.RDF)
+					rdfSerializer.processItemDocument(this.datamodelConverter.copy(itemDocument));
 		}
 		else if (operation == Operation.PROVENANCE) {
 
