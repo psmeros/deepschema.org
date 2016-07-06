@@ -28,12 +28,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -63,8 +61,8 @@ import org.wikidata.wdtk.rdf.RdfSerializer;
  */
 public class ExtractingTool implements EntityDocumentProcessor {
 
-	/**********Parameters**********/
-	Output output = Output.RDF;
+	/********** Parameters **********/
+	Output output = Output.TXT;
 
 	Boolean useCache = false;
 
@@ -78,7 +76,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream, rdfStream;
 
 	enum Operation {
-		READ_FROM_DUMP, ENHANCE_AND_FILTER, STRUCTURE_OUTPUT, INSPECT_PROVENANCE
+		READ_FROM_DUMP, ENHANCE_AND_FILTER, STRUCTURE_OUTPUT, EXPLORE_DATASET
 	}
 
 	Operation operation;
@@ -93,16 +91,17 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 		private static final long serialVersionUID = 1L;
 		String label;
+		Set<String> subclassOf;
 		Set<String> instances;
 
 		public WikidataClassProperties() {
 			this.label = "";
+			this.subclassOf = new HashSet<String>();
 			this.instances = new HashSet<String>();
 		}
 	}
 
 	Map<String, WikidataClassProperties> classes;
-	Map<String, List<String>> subclasses;
 	Map<String, String> instances;
 
 	DatamodelConverter datamodelConverter;
@@ -117,9 +116,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	public ExtractingTool() throws IOException {
 
 		this.classes = new HashMap<>();
-		this.subclasses = new HashMap<>();
-		if (includeInstances)
-			this.instances = new HashMap<>();
+		this.instances = new HashMap<>();
 
 		if (output == Output.TSV) {
 			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classes.tsv.gz")));
@@ -209,8 +206,8 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				for (Entry<String, WikidataClassProperties> entry : classes.entrySet())
 					classesStream.write((entry.getKey().substring(1) + separator + entry.getValue().label + "\n").getBytes());
 
-				for (Entry<String, List<String>> entry : subclasses.entrySet())
-					for (String value : entry.getValue())
+				for (Entry<String, WikidataClassProperties> entry : classes.entrySet())
+					for (String value : entry.getValue().subclassOf)
 						subclassOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
 
 				if (includeInstances) {
@@ -240,7 +237,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				rdfStream.close();
 			}
 			else if (output == Output.TXT) {
-				operation = Operation.INSPECT_PROVENANCE;
+				operation = Operation.EXPLORE_DATASET;
 				ExampleHelpers.processEntitiesFromWikidataDump(this);
 				txtStream.close();
 			}
@@ -263,14 +260,12 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				case "read": {
 					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
 					classes = (Map<String, WikidataClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
-					subclasses = (Map<String, List<String>>) ((ObjectInputStream) objectInputStream).readObject();
 					instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
 					objectInputStream.close();
 				}
 				case "write": {
 					ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(cacheFile));
 					objectOutputStream.writeObject(classes);
-					objectOutputStream.writeObject(subclasses);
 					objectOutputStream.writeObject(instances);
 					objectOutputStream.flush();
 					objectOutputStream.close();
@@ -294,8 +289,8 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		else if (operation == Operation.STRUCTURE_OUTPUT) {
 			structureOutput(itemDocument);
 		}
-		else if (operation == Operation.INSPECT_PROVENANCE) {
-			inspectProvenance(itemDocument);
+		else if (operation == Operation.EXPLORE_DATASET) {
+			exploreDataset(itemDocument);
 		}
 	}
 
@@ -303,7 +298,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	 * Reads from Dump and applies RDFS rules for extraction.
 	 * 
 	 * @param ItemDocument
-	 */	
+	 */
 	void readFromDump(ItemDocument itemDocument) {
 
 		StatementGroup sg = null;
@@ -341,19 +336,17 @@ public class ExtractingTool implements EntityDocumentProcessor {
 					if (!classes.containsKey(value.getId()))
 						classes.put(value.getId(), new WikidataClassProperties());
 
-					if (!subclasses.containsKey(sg.getSubject().getId()))
-						subclasses.put(sg.getSubject().getId(), new ArrayList<String>());
-					subclasses.get(sg.getSubject().getId()).add(value.getId());
+					classes.get(sg.getSubject().getId()).subclassOf.add(value.getId());
 				}
 			}
 		}
 	}
 
 	/**
-	 * Finds the labels of the classes and applies the filters. 
+	 * Finds the labels of the classes and applies the filters.
 	 * 
 	 * @param ItemDocument
-	 */	
+	 */
 	void enhanceAndFilter(ItemDocument itemDocument) {
 		Boolean isClass = false, isInstance = false;
 		String currentId = itemDocument.getEntityId().getId();
@@ -365,9 +358,10 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 		if (isClass || isInstance) {
 
-			// Add english label; if not exists, add the first available.
+			// Add english label
 			String label = itemDocument.findLabel("en");
 			if (label == null) {
+
 				// Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
 				// if (otherlabels.isEmpty())
 				// label = "No Label";
@@ -376,12 +370,12 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 				if (isClass) {
 					classes.remove(currentId);
-					subclasses.remove(currentId);
 					return;
 				}
-				else if (isInstance)
+				else if (isInstance) {
 					instances.remove(currentId);
-				return;
+					return;
+				}
 			}
 			label = label.replace(separator, " ");
 
@@ -398,7 +392,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
 
 					classes.remove(currentId);
-					subclasses.remove(currentId);
 					return;
 				}
 			}
@@ -431,7 +424,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 									(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
 									(pid.equals("P248") && vid.contains("Q21234191"))) { // NuDat
 										classes.remove(currentId);
-										subclasses.remove(currentId);
 										return;
 									}
 								}
@@ -447,7 +439,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	 * Structures the output to JSON or RDF format.
 	 * 
 	 * @param ItemDocument
-	 */	
+	 */
 	public void structureOutput(ItemDocument itemDocument) {
 		if (classes.containsKey(itemDocument.getEntityId().getId()))
 			if (output == Output.JSON)
@@ -457,29 +449,37 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	}
 
 	/**
-	 * Inspects Provenance Information.
+	 * Explores Dataset.
 	 * 
 	 * @param ItemDocument
-	 */	
-	public void inspectProvenance(ItemDocument itemDocument) {
-		if (classes.containsKey(itemDocument.getEntityId().getId())) {
+	 */
+	public void exploreDataset(ItemDocument itemDocument) {
 
-			for (StatementGroup sg : itemDocument.getStatementGroups()) {
-				for (Statement s : sg) {
-					for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
-						for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-							try {
-								Snak snak = sn.next();
-								if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248"))
-									txtStream.write((snak + "\n").getBytes());
-							}
-							catch (IOException e) {
-								e.printStackTrace();
+		final String operation = "inspectLanguages";
+
+		if (operation.equals("inspectProvenance")) {
+			if (classes.containsKey(itemDocument.getEntityId().getId())) {
+
+				for (StatementGroup sg : itemDocument.getStatementGroups()) {
+					for (Statement s : sg) {
+						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
+							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+								try {
+									Snak snak = sn.next();
+									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248"))
+										txtStream.write((snak + "\n").getBytes());
+								}
+								catch (IOException e) {
+									e.printStackTrace();
+								}
 							}
 						}
 					}
 				}
 			}
+		}
+		else if (operation.equals("inspectLanguages")) {
+
 		}
 	}
 
