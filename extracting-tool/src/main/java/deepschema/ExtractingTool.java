@@ -64,7 +64,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	/********** Parameters **********/
 	Output output = Output.TXT;
 
-	Boolean useCache = false;
+	Boolean useCache = true;
 
 	Boolean filterCategories = false;
 
@@ -355,48 +355,44 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			isClass = true;
 		else if (instances.containsKey(currentId))
 			isInstance = true;
+		else
+			return;
 
-		if (isClass || isInstance) {
-
-			// Add english label
-			String label = itemDocument.findLabel("en");
-			if (label == null) {
-
-				// Collection<MonolingualTextValue> otherlabels = itemDocument.getLabels().values();
-				// if (otherlabels.isEmpty())
-				// label = "No Label";
-				// else
-				// label = otherlabels.iterator().next().getText();
-
-				if (isClass) {
-					classes.remove(currentId);
-					return;
-				}
-				else if (isInstance) {
-					instances.remove(currentId);
-					return;
-				}
-			}
-			label = label.replace(separator, " ");
-
+		// Add english label.
+		String label = itemDocument.findLabel("en");
+		if (label == null || label.trim() == "")
+			label = itemDocument.findLabel("uk");
+		if (label == null || label.trim() == "")
+			label = itemDocument.findLabel("en-us");
+		if (label == null || label.trim() == "")
+			label = itemDocument.findLabel("en-gb");
+		if (label == null || label.trim() == "")
+			label = itemDocument.findLabel("en-ca");
+		
+		if (label == null || label.trim() == "") {
 			if (isClass)
-				classes.get(currentId).label = label;
+				classes.remove(currentId);
 			else if (isInstance)
-				instances.put(currentId, label);
+				instances.remove(currentId);
+			return;
 		}
+		label = label.replace(separator, " ");
+
+		if (isClass)
+			classes.get(currentId).label = label;
+		else if (isInstance)
+			instances.put(currentId, label);
 
 		if (isClass) {
-			// filter category classes
+			// Filter category classes.
 			if (filterCategories) {
-				String label = classes.get(currentId).label;
 				if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
-
 					classes.remove(currentId);
 					return;
 				}
 			}
 
-			// filter classes from Biological DBs
+			// Filter classes from Biological DBs.
 			if (filterBioDBs) {
 				for (StatementGroup sg : itemDocument.getStatementGroups()) {
 					for (Statement s : sg) {
@@ -455,7 +451,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	 */
 	public void exploreDataset(ItemDocument itemDocument) {
 
-		final String operation = "inspectLanguages";
+		final String operation = "inspectLanguages2";
 
 		if (operation.equals("inspectProvenance")) {
 			if (classes.containsKey(itemDocument.getEntityId().getId())) {
@@ -478,8 +474,29 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				}
 			}
 		}
-		else if (operation.equals("inspectLanguages")) {
+		else if (operation.equals("inspectLanguages1")) {
+			if (classes.containsKey(itemDocument.getEntityId().getId())) {
 
+				for (Iterator<String> it = itemDocument.getLabels().keySet().iterator(); it.hasNext();) {
+					try {
+						txtStream.write((it.next() + "\n").getBytes());
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+		else if (operation.equals("inspectLanguages2")) {
+			if (classes.containsKey(itemDocument.getEntityId().getId())) {
+
+				try {
+					txtStream.write((classes.get(itemDocument.getEntityId().getId()).label + "\t" + itemDocument.getLabels().size() + "\n").getBytes());
+				}
+				catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 
