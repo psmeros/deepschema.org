@@ -47,6 +47,7 @@ import org.wikidata.wdtk.datamodel.interfaces.Reference;
 import org.wikidata.wdtk.datamodel.interfaces.Snak;
 import org.wikidata.wdtk.datamodel.interfaces.Statement;
 import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
+import org.wikidata.wdtk.datamodel.interfaces.Value;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 import org.wikidata.wdtk.dumpfiles.DumpProcessingController;
@@ -368,7 +369,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			label = itemDocument.findLabel("en-gb");
 		if (label == null || label.trim() == "")
 			label = itemDocument.findLabel("en-ca");
-		
+
 		if (label == null || label.trim() == "") {
 			if (isClass)
 				classes.remove(currentId);
@@ -402,25 +403,36 @@ public class ExtractingTool implements EntityDocumentProcessor {
 								if (snak.getValue() != null) {
 									String pid = snak.getPropertyId().getId();
 									String vid = snak.getValue().toString();
-									if ((pid.equals("P143") && vid.contains("Q20641742")) || // NCBI Gene
-									(pid.equals("P248") && vid.contains("Q20950174")) || // NCBI homo sapiens annotation release 107
-									(pid.equals("P143") && vid.contains("Q905695")) || // UniProt
-									(pid.equals("P248") && vid.contains("Q20973051")) || // NCBI mus musculus annotation release 105
-									(pid.equals("P248") && vid.contains("Q2629752")) || // Swiss-Prot
-									(pid.equals("P248") && vid.contains("Q905695")) || // UniProt
-									(pid.equals("P248") && vid.contains("Q20641742")) || // NCBI Gene
-									(pid.equals("P143") && vid.contains("Q1344256")) || // Ensembl
-									(pid.equals("P248") && vid.contains("Q21996330")) || // Ensembl Release 83
-									(pid.equals("P248") && vid.contains("Q135085")) || // Gene Ontology
-									(pid.equals("P143") && vid.contains("Q22230760")) || // Ontology Lookup Service
-									(pid.equals("P143") && vid.contains("Q1345229")) || // Entrez
-									(pid.equals("P248") && vid.contains("Q5282129")) || // Disease Ontology
-									(pid.equals("P143") && vid.contains("Q468215")) || // HomoloGene
-									(pid.equals("P248") && vid.contains("Q20976936")) || // HomoloGene build68
-									(pid.equals("P248") && vid.contains("Q17939676")) || // NCBI Homo sapiens Annotation Release 106
-									(pid.equals("P248") && vid.contains("Q21234191"))) { // NuDat
-										classes.remove(currentId);
-										return;
+
+									if (pid.equals("P143")) {
+										if (vid.contains("Q20641742") || // NCBI Gene
+										vid.contains("Q905695") || // UniProt
+										vid.contains("Q1344256") || // Ensembl
+										vid.contains("Q22230760") || // Ontology Lookup Service
+										vid.contains("Q1345229") || // Entrez
+										vid.contains("Q468215") || // HomoloGene
+										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
+											classes.remove(currentId);
+											return;
+										}
+									}
+
+									if (pid.equals("P248")) {
+										if (vid.contains("Q20950174") || // NCBI homo sapiens annotation release 107
+										vid.contains("Q20973051") || // NCBI mus musculus annotation release 105
+										vid.contains("Q2629752") || // Swiss-Prot
+										vid.contains("Q905695") || // UniProt
+										vid.contains("Q20641742") || // NCBI Gene
+										vid.contains("Q21996330") || // Ensembl Release 83
+										vid.contains("Q135085") || // Gene Ontology
+										vid.contains("Q5282129") || // Disease Ontology
+										vid.contains("Q20976936") || // HomoloGene build68
+										vid.contains("Q17939676") || // NCBI Homo sapiens Annotation Release 106
+										vid.contains("Q21234191") || // NuDat
+										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
+											classes.remove(currentId);
+											return;
+										}
 									}
 								}
 							}
@@ -451,26 +463,77 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	 */
 	public void exploreDataset(ItemDocument itemDocument) {
 
-		final String operation = "inspectLanguages2";
+		final String operation = "inspectProvenance";
 
 		if (operation.equals("inspectProvenance")) {
 			if (classes.containsKey(itemDocument.getEntityId().getId())) {
 
-				for (StatementGroup sg : itemDocument.getStatementGroups()) {
-					for (Statement s : sg) {
-						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
-							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-								try {
-									Snak snak = sn.next();
-									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248"))
-										txtStream.write((snak + "\n").getBytes());
+				try {
+					Boolean foundProvenance = false;
+					// Freebase ID
+					if (itemDocument.hasStatement("P646")) {
+						txtStream.write(("freebase \n").getBytes());
+						foundProvenance = true;
+					}
+
+					// GND ID
+					if (itemDocument.hasStatement("P227")) {
+						txtStream.write(("GND \n").getBytes());
+						foundProvenance = true;
+					}
+
+					StatementGroup sg = null;
+
+					// Equivalent class
+					sg = itemDocument.findStatementGroup("P1709");
+
+					if (sg != null) {
+						for (Statement s : sg.getStatements()) {
+							Value value = s.getValue();
+							if (value != null) {
+								if (value.toString().contains("dbpedia")) {
+									txtStream.write(("dbpedia \n").getBytes());
+									foundProvenance = true;
 								}
-								catch (IOException e) {
-									e.printStackTrace();
+								else if (value.toString().contains("schema.org")) {
+									txtStream.write(("schema.org \n").getBytes());
+									foundProvenance = true;
 								}
 							}
 						}
 					}
+
+					Set<String> prov = new HashSet<String>();
+					for (StatementGroup stg : itemDocument.getStatementGroups()) {
+						for (Statement s : stg) {
+							for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
+								for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+									Snak snak = sn.next();
+									// "imported from" and "stated in"
+									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248")) {
+										prov.add(snak.getValue().toString());
+									}
+								}
+							}
+						}
+					}
+					for (Iterator<String> s = prov.iterator(); s.hasNext();) {
+						try {
+							txtStream.write((s.next() + "\n").getBytes());
+							foundProvenance = true;
+						}
+						catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+
+					if (!foundProvenance) {
+						txtStream.write(("other \n").getBytes());
+						System.out.println(itemDocument.getEntityId());
+					}
+				}
+				catch (IOException e) {
+					e.printStackTrace();
 				}
 			}
 		}
