@@ -1,11 +1,6 @@
 package deepschema;
 
 /*
- * #%L
- * Wikidata Toolkit Examples
- * %%
- * Copyright (C) 2014 - 2015 Wikidata Toolkit Developers
- * %%
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -17,8 +12,30 @@ package deepschema;
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * #L%
  */
+
+import static deepschema.Parameters.classes;
+import static deepschema.Parameters.classesStream;
+import static deepschema.Parameters.datamodelConverter;
+import static deepschema.Parameters.includeInstances;
+import static deepschema.Parameters.instanceOfRelationsStream;
+import static deepschema.Parameters.instances;
+import static deepschema.Parameters.instancesStream;
+import static deepschema.Parameters.jsonSerializer;
+import static deepschema.Parameters.jsonStream;
+import static deepschema.Parameters.operation;
+import static deepschema.Parameters.output;
+import static deepschema.Parameters.rdfSerializer;
+import static deepschema.Parameters.rdfStream;
+import static deepschema.Parameters.separator;
+import static deepschema.Parameters.subclassOfRelationsStream;
+import static deepschema.Parameters.txtStream;
+import static deepschema.Parameters.useCache;
+import static deepschema.DumpOperations.enhanceAndFilter;
+import static deepschema.DumpOperations.exploreDataset;
+import static deepschema.DumpOperations.processEntitiesFromWikidataDump;
+import static deepschema.DumpOperations.readFromDump;
+import static deepschema.DumpOperations.structureOutput;
 
 import java.io.BufferedOutputStream;
 import java.io.FileInputStream;
@@ -26,33 +43,34 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.log4j.ConsoleAppender;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
 import org.openrdf.rio.RDFFormat;
 import org.wikidata.wdtk.datamodel.helpers.DatamodelConverter;
 import org.wikidata.wdtk.datamodel.interfaces.EntityDocumentProcessor;
 import org.wikidata.wdtk.datamodel.interfaces.ItemDocument;
-import org.wikidata.wdtk.datamodel.interfaces.ItemIdValue;
 import org.wikidata.wdtk.datamodel.interfaces.PropertyDocument;
-import org.wikidata.wdtk.datamodel.interfaces.Reference;
-import org.wikidata.wdtk.datamodel.interfaces.Snak;
-import org.wikidata.wdtk.datamodel.interfaces.Statement;
-import org.wikidata.wdtk.datamodel.interfaces.StatementGroup;
-import org.wikidata.wdtk.datamodel.interfaces.Value;
 import org.wikidata.wdtk.datamodel.json.jackson.JacksonObjectFactory;
 import org.wikidata.wdtk.datamodel.json.jackson.JsonSerializer;
 import org.wikidata.wdtk.dumpfiles.DumpProcessingController;
 import org.wikidata.wdtk.rdf.PropertyRegister;
 import org.wikidata.wdtk.rdf.RdfSerializer;
+
+import deepschema.Parameters.Operation;
+import deepschema.Parameters.Output;
+import deepschema.Parameters.WikidataClassProperties;
+import deepschema.Parameters.WikidataInstanceProperties;
 
 /**
  * deepchema.org extracting tool.
@@ -62,140 +80,119 @@ import org.wikidata.wdtk.rdf.RdfSerializer;
  */
 public class ExtractingTool implements EntityDocumentProcessor {
 
-	/********** Parameters **********/
-	Output output = Output.TXT;
-
-	Boolean useCache = true;
-
-	Boolean filterCategories = false;
-
-	Boolean filterBioDBs = true;
-
-	Boolean includeInstances = false;
-	/******************************/
-
-	OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream, rdfStream;
-
-	enum Operation {
-		READ_FROM_DUMP, ENHANCE_AND_FILTER, STRUCTURE_OUTPUT, EXPLORE_DATASET
-	}
-
-	Operation operation;
-
-	enum Output {
-		JSON, RDF, TSV, TXT
-	}
-
-	final String separator = "\t";
-
-	static class WikidataClassProperties implements Serializable {
-
-		private static final long serialVersionUID = 1L;
-		String label;
-		Set<String> subclassOf;
-		Set<String> instances;
-
-		public WikidataClassProperties() {
-			this.label = "";
-			this.subclassOf = new HashSet<String>();
-			this.instances = new HashSet<String>();
-		}
-	}
-
-	Map<String, WikidataClassProperties> classes;
-	Map<String, String> instances;
-
-	DatamodelConverter datamodelConverter;
-	JsonSerializer jsonSerializer;
-	RdfSerializer rdfSerializer;
-
 	/**
 	 * Constructor. Opens the file that we want to write to.
 	 *
-	 * @throws IOException (if there is a problem opening the output file(s))
 	 */
-	public ExtractingTool() throws IOException {
+	public ExtractingTool() {
+		try {
+			if (output == Output.TSV) {
 
-		this.classes = new HashMap<>();
-		this.instances = new HashMap<>();
+				classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("classes.tsv.gz")));
+				subclassOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("subclassOfRelations.tsv.gz")));
+				if (includeInstances) {
+					instancesStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("instances.tsv.gz")));
+					instanceOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("instanceOfRelations.tsv.gz")));
+				}
+			}
+			else if (output == Output.JSON) {
+				jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("classesAndInstances.json.gz")));
 
-		if (output == Output.TSV) {
-			this.classesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classes.tsv.gz")));
-			this.subclassOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("subclassOfRelations.tsv.gz")));
-			if (includeInstances) {
-				this.instancesStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("instances.tsv.gz")));
-				this.instanceOfRelationsStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("instanceOfRelations.tsv.gz")));
+				// DataModel
+				datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
+				// Do not copy references.
+				datamodelConverter.setOptionDeepCopyReferences(false);
+				// Only copy English labels, descriptions, and aliases.
+				datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
+				// Copy statements of all the properties.
+				datamodelConverter.setOptionPropertyFilter(null);
+				// Do not copy sitelinks.
+				datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
+
+				jsonSerializer = new JsonSerializer(jsonStream);
+				jsonSerializer.open();
+			}
+			else if (output == Output.RDF) {
+				rdfStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("classesAndInstances.nt.gz")));
+
+				// DataModel
+				datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
+				// Do not copy references.
+				datamodelConverter.setOptionDeepCopyReferences(false);
+				// Only copy English labels, descriptions, and aliases.
+				datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
+				// Copy statements of all the properties.
+				datamodelConverter.setOptionPropertyFilter(null);
+				// Do not copy sitelinks.
+				datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
+
+				rdfSerializer = new RdfSerializer(RDFFormat.NTRIPLES, rdfStream, new DumpProcessingController("wikidatawiki").getSitesInformation(), PropertyRegister.getWikidataPropertyRegister());
+				// Serialize simple statements (and nothing else) for all items
+				rdfSerializer.setTasks(RdfSerializer.TASK_ITEMS | RdfSerializer.TASK_SIMPLE_STATEMENTS);
+				rdfSerializer.open();
+			}
+			else if (output == Output.TXT) {
+				txtStream = new GzipCompressorOutputStream(new BufferedOutputStream(openOutput("output.txt.gz")));
 			}
 		}
-		else if (output == Output.JSON) {
-			this.jsonStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classesAndInstances.json.gz")));
-
-			// DataModel
-			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
-			// Do not copy references.
-			this.datamodelConverter.setOptionDeepCopyReferences(false);
-			// Only copy English labels, descriptions, and aliases.
-			this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
-			// Copy statements of all the properties.
-			this.datamodelConverter.setOptionPropertyFilter(null);
-			// Do not copy sitelinks.
-			this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
-
-			this.jsonSerializer = new JsonSerializer(jsonStream);
-			this.jsonSerializer.open();
-		}
-		else if (output == Output.RDF) {
-			this.rdfStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("classesAndInstances.nt.gz")));
-
-			// DataModel
-			this.datamodelConverter = new DatamodelConverter(new JacksonObjectFactory());
-			// Do not copy references.
-			this.datamodelConverter.setOptionDeepCopyReferences(false);
-			// Only copy English labels, descriptions, and aliases.
-			this.datamodelConverter.setOptionLanguageFilter(Collections.singleton("en"));
-			// Copy statements of all the properties.
-			this.datamodelConverter.setOptionPropertyFilter(null);
-			// Do not copy sitelinks.
-			this.datamodelConverter.setOptionSiteLinkFilter(Collections.<String> emptySet());
-
-			this.rdfSerializer = new RdfSerializer(RDFFormat.NTRIPLES, rdfStream, new DumpProcessingController("wikidatawiki").getSitesInformation(), PropertyRegister.getWikidataPropertyRegister());
-			// Serialize simple statements (and nothing else) for all items
-			this.rdfSerializer.setTasks(RdfSerializer.TASK_ITEMS | RdfSerializer.TASK_SIMPLE_STATEMENTS);
-			this.rdfSerializer.open();
-		}
-		else if (output == Output.TXT) {
-			this.txtStream = new GzipCompressorOutputStream(new BufferedOutputStream(ExampleHelpers.openExampleFileOuputStream("output.txt.gz")));
+		catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
 	/**
-	 * Runs the example program.
-	 *
+	 * Initializes the extracting procedure.
+	 * 
 	 * @param args
-	 * @throws IOException (if there was a problem in writing the output file(s))
 	 */
-	public static void main(String[] args) throws IOException {
-		ExampleHelpers.configureLogging();
+	public static void main(String[] args) {
+		// Create the appender that will write log messages to the console.
+		ConsoleAppender consoleAppender = new ConsoleAppender();
+		// Define the pattern of log messages.
+		// Insert the string "%c{1}:%L" to also show class name and line.
+		String pattern = "%d{yyyy-MM-dd HH:mm:ss} %-5p - %m%n";
+		consoleAppender.setLayout(new PatternLayout(pattern));
+		// Change to Level.ERROR for fewer messages:
+		consoleAppender.setThreshold(Level.INFO);
+		consoleAppender.activateOptions();
+		Logger.getRootLogger().addAppender(consoleAppender);
 
-		new ExtractingTool().init();
-	}
+		ExtractingTool extractingTool = new ExtractingTool();
 
-	/**
-	 * Initializes the procedure.
-	 */
-	public void init() {
-		if (!useCache) {
-			operation = Operation.READ_FROM_DUMP;
-			ExampleHelpers.processEntitiesFromWikidataDump(this);
-			operation = Operation.ENHANCE_AND_FILTER;
-			ExampleHelpers.processEntitiesFromWikidataDump(this);
-			writeOutput();
-			cache("write");
+		if (useCache) {
+			extractingTool.cache("read");
+			extractingTool.writeOutput();
 		}
 		else {
-			cache("read");
-			writeOutput();
+			operation = Operation.READ_FROM_DUMP;
+			processEntitiesFromWikidataDump(extractingTool);
+			operation = Operation.ENHANCE_AND_FILTER;
+			processEntitiesFromWikidataDump(extractingTool);
+			extractingTool.writeOutput();
+			extractingTool.cache("write");
 		}
+	}
+
+	/**
+	 * Opens output file.
+	 * 
+	 * @param filename
+	 * @return FileOutputStream
+	 */
+	FileOutputStream openOutput(String filename) throws IOException {
+		Path directoryPath = Paths.get("results");
+
+		try {
+			Files.createDirectory(directoryPath);
+		}
+		catch (FileAlreadyExistsException e) {
+			if (!Files.isDirectory(directoryPath)) {
+				throw e;
+			}
+		}
+
+		Path filePath = directoryPath.resolve(filename);
+		return new FileOutputStream(filePath.toFile());
 	}
 
 	/**
@@ -212,12 +209,12 @@ public class ExtractingTool implements EntityDocumentProcessor {
 						subclassOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
 
 				if (includeInstances) {
-					for (Entry<String, String> entry : instances.entrySet())
-						instancesStream.write((entry.getKey().substring(1) + separator + entry.getValue() + "\n").getBytes());
+					for (Entry<String, WikidataInstanceProperties> entry : instances.entrySet())
+						instancesStream.write((entry.getKey().substring(1) + separator + entry.getValue().label + "\n").getBytes());
 
-					for (Entry<String, WikidataClassProperties> entry : classes.entrySet())
-						for (String value : entry.getValue().instances)
-							instanceOfRelationsStream.write((value.substring(1) + separator + entry.getKey().substring(1) + "\n").getBytes());
+					for (Entry<String, WikidataInstanceProperties> entry : instances.entrySet())
+						for (String value : entry.getValue().instanceOf)
+							instanceOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
 				}
 				classesStream.close();
 				subclassOfRelationsStream.close();
@@ -229,17 +226,17 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			}
 			else if (output == Output.JSON) {
 				operation = Operation.STRUCTURE_OUTPUT;
-				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				processEntitiesFromWikidataDump(this);
 				jsonStream.close();
 			}
 			else if (output == Output.RDF) {
 				operation = Operation.STRUCTURE_OUTPUT;
-				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				processEntitiesFromWikidataDump(this);
 				rdfStream.close();
 			}
 			else if (output == Output.TXT) {
 				operation = Operation.EXPLORE_DATASET;
-				ExampleHelpers.processEntitiesFromWikidataDump(this);
+				processEntitiesFromWikidataDump(this);
 				txtStream.close();
 			}
 		}
@@ -261,7 +258,7 @@ public class ExtractingTool implements EntityDocumentProcessor {
 				case "read": {
 					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
 					classes = (Map<String, WikidataClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
-					instances = (Map<String, String>) ((ObjectInputStream) objectInputStream).readObject();
+					instances = (Map<String, WikidataInstanceProperties>) ((ObjectInputStream) objectInputStream).readObject();
 					objectInputStream.close();
 				}
 				case "write": {
@@ -292,274 +289,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 		}
 		else if (operation == Operation.EXPLORE_DATASET) {
 			exploreDataset(itemDocument);
-		}
-	}
-
-	/**
-	 * Reads from Dump and applies RDFS rules for extraction.
-	 * 
-	 * @param ItemDocument
-	 */
-	void readFromDump(ItemDocument itemDocument) {
-
-		StatementGroup sg = null;
-
-		// instanceOf(I, C) => Class(C) #RDFS
-		sg = itemDocument.findStatementGroup("P31");
-
-		if (sg != null) {
-			for (Statement s : sg.getStatements()) {
-				ItemIdValue value = (ItemIdValue) s.getValue();
-				if (value != null) {
-					if (!classes.containsKey(value.getId()))
-						classes.put(value.getId(), new WikidataClassProperties());
-
-					if (includeInstances) {
-						classes.get(value.getId()).instances.add(sg.getSubject().getId());
-
-						if (!instances.containsKey(sg.getSubject().getId()))
-							instances.put(sg.getSubject().getId(), "");
-					}
-				}
-			}
-		}
-
-		// subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
-		sg = itemDocument.findStatementGroup("P279");
-
-		if (sg != null) {
-			if (!classes.containsKey(sg.getSubject().getId()))
-				classes.put(sg.getSubject().getId(), new WikidataClassProperties());
-
-			for (Statement s : sg.getStatements()) {
-				ItemIdValue value = (ItemIdValue) s.getValue();
-				if (value != null) {
-					if (!classes.containsKey(value.getId()))
-						classes.put(value.getId(), new WikidataClassProperties());
-
-					classes.get(sg.getSubject().getId()).subclassOf.add(value.getId());
-				}
-			}
-		}
-	}
-
-	/**
-	 * Finds the labels of the classes and applies the filters.
-	 * 
-	 * @param ItemDocument
-	 */
-	void enhanceAndFilter(ItemDocument itemDocument) {
-		Boolean isClass = false, isInstance = false;
-		String currentId = itemDocument.getEntityId().getId();
-
-		if (classes.containsKey(currentId))
-			isClass = true;
-		else if (instances.containsKey(currentId))
-			isInstance = true;
-		else
-			return;
-
-		// Add english label.
-		String label = itemDocument.findLabel("en");
-		if (label == null || label.trim() == "")
-			label = itemDocument.findLabel("uk");
-		if (label == null || label.trim() == "")
-			label = itemDocument.findLabel("en-us");
-		if (label == null || label.trim() == "")
-			label = itemDocument.findLabel("en-gb");
-		if (label == null || label.trim() == "")
-			label = itemDocument.findLabel("en-ca");
-
-		if (label == null || label.trim() == "") {
-			if (isClass)
-				classes.remove(currentId);
-			else if (isInstance)
-				instances.remove(currentId);
-			return;
-		}
-		label = label.replace(separator, " ");
-
-		if (isClass)
-			classes.get(currentId).label = label;
-		else if (isInstance)
-			instances.put(currentId, label);
-
-		if (isClass) {
-			// Filter category classes.
-			if (filterCategories) {
-				if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
-					classes.remove(currentId);
-					return;
-				}
-			}
-
-			// Filter classes from Biological DBs.
-			if (filterBioDBs) {
-				for (StatementGroup sg : itemDocument.getStatementGroups()) {
-					for (Statement s : sg) {
-						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
-							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-								Snak snak = sn.next();
-								if (snak.getValue() != null) {
-									String pid = snak.getPropertyId().getId();
-									String vid = snak.getValue().toString();
-
-									if (pid.equals("P143")) {
-										if (vid.contains("Q20641742") || // NCBI Gene
-										vid.contains("Q905695") || // UniProt
-										vid.contains("Q1344256") || // Ensembl
-										vid.contains("Q22230760") || // Ontology Lookup Service
-										vid.contains("Q1345229") || // Entrez
-										vid.contains("Q468215") || // HomoloGene
-										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-											classes.remove(currentId);
-											return;
-										}
-									}
-
-									if (pid.equals("P248")) {
-										if (vid.contains("Q20950174") || // NCBI homo sapiens annotation release 107
-										vid.contains("Q20973051") || // NCBI mus musculus annotation release 105
-										vid.contains("Q2629752") || // Swiss-Prot
-										vid.contains("Q905695") || // UniProt
-										vid.contains("Q20641742") || // NCBI Gene
-										vid.contains("Q21996330") || // Ensembl Release 83
-										vid.contains("Q135085") || // Gene Ontology
-										vid.contains("Q5282129") || // Disease Ontology
-										vid.contains("Q20976936") || // HomoloGene build68
-										vid.contains("Q17939676") || // NCBI Homo sapiens Annotation Release 106
-										vid.contains("Q21234191") || // NuDat
-										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-											classes.remove(currentId);
-											return;
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	/**
-	 * Structures the output to JSON or RDF format.
-	 * 
-	 * @param ItemDocument
-	 */
-	public void structureOutput(ItemDocument itemDocument) {
-		if (classes.containsKey(itemDocument.getEntityId().getId()))
-			if (output == Output.JSON)
-				jsonSerializer.processItemDocument(datamodelConverter.copy(itemDocument));
-			else if (output == Output.RDF)
-				rdfSerializer.processItemDocument(datamodelConverter.copy(itemDocument));
-	}
-
-	/**
-	 * Explores Dataset.
-	 * 
-	 * @param ItemDocument
-	 */
-	public void exploreDataset(ItemDocument itemDocument) {
-
-		final String operation = "inspectProvenance";
-
-		if (operation.equals("inspectProvenance")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
-
-				try {
-					Boolean foundProvenance = false;
-					// Freebase ID
-					if (itemDocument.hasStatement("P646")) {
-						txtStream.write(("freebase \n").getBytes());
-						foundProvenance = true;
-					}
-
-					// GND ID
-					if (itemDocument.hasStatement("P227")) {
-						txtStream.write(("GND \n").getBytes());
-						foundProvenance = true;
-					}
-
-					StatementGroup sg = null;
-
-					// Equivalent class
-					sg = itemDocument.findStatementGroup("P1709");
-
-					if (sg != null) {
-						for (Statement s : sg.getStatements()) {
-							Value value = s.getValue();
-							if (value != null) {
-								if (value.toString().contains("dbpedia")) {
-									txtStream.write(("dbpedia \n").getBytes());
-									foundProvenance = true;
-								}
-								else if (value.toString().contains("schema.org")) {
-									txtStream.write(("schema.org \n").getBytes());
-									foundProvenance = true;
-								}
-							}
-						}
-					}
-
-					Set<String> prov = new HashSet<String>();
-					for (StatementGroup stg : itemDocument.getStatementGroups()) {
-						for (Statement s : stg) {
-							for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
-								for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-									Snak snak = sn.next();
-									// "imported from" and "stated in"
-									if (snak.getPropertyId().getId().equals("P143") || snak.getPropertyId().getId().equals("P248")) {
-										prov.add(snak.getValue().toString());
-									}
-								}
-							}
-						}
-					}
-					for (Iterator<String> s = prov.iterator(); s.hasNext();) {
-						try {
-							txtStream.write((s.next() + "\n").getBytes());
-							foundProvenance = true;
-						}
-						catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-
-					if (!foundProvenance) {
-						txtStream.write(("other \n").getBytes());
-						System.out.println(itemDocument.getEntityId());
-					}
-				}
-				catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-		else if (operation.equals("inspectLanguages1")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
-
-				for (Iterator<String> it = itemDocument.getLabels().keySet().iterator(); it.hasNext();) {
-					try {
-						txtStream.write((it.next() + "\n").getBytes());
-					}
-					catch (IOException e) {
-						e.printStackTrace();
-					}
-				}
-			}
-		}
-		else if (operation.equals("inspectLanguages2")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
-
-				try {
-					txtStream.write((classes.get(itemDocument.getEntityId().getId()).label + "\t" + itemDocument.getLabels().size() + "\n").getBytes());
-				}
-				catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
 		}
 	}
 
