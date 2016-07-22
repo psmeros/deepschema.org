@@ -40,14 +40,14 @@ public class Parameters {
 	 * if the dump file would have ended there. This is useful for testing (and in particular better than just aborting the program) since it allows for final
 	 * processing and proper closing to happen without having to wait for a whole dump file to process.
 	 */
-	static final int TIMEOUT_SEC = 5;
+	static final int TIMEOUT_SEC = 0;
 
 	/**
 	 * If set to true, all example programs will run in offline mode. Only data dumps that have been downloaded in previous runs will be used.
 	 */
 	static final boolean OFFLINE_MODE = true;
 
-	static final Output output = Output.TXT;
+	static final Output output = Output.TSV;
 
 	static final Boolean useCache = false;
 
@@ -55,7 +55,7 @@ public class Parameters {
 
 	static final Boolean filterBioDBs = true;
 
-	static final Boolean includeInstances = false;
+	static final Boolean includeInstances = true;
 
 	/******************************************************************************************/
 
@@ -65,11 +65,11 @@ public class Parameters {
 
 		private static final long serialVersionUID = 1L;
 		String label;
-		Set<String> subclassOf;
+		Set<Integer> subclassOf;
 
 		public WikidataClassProperties() {
 			this.label = "";
-			this.subclassOf = new HashSet<String>();
+			this.subclassOf = new HashSet<Integer>();
 		}
 	}
 
@@ -77,21 +77,21 @@ public class Parameters {
 
 		private static final long serialVersionUID = 1L;
 		String label;
-		Set<String> instanceOf;
+		Set<Integer> instanceOf;
 
 		public WikidataInstanceProperties() {
 			this.label = "";
-			this.instanceOf = new HashSet<String>();
+			this.instanceOf = new HashSet<Integer>();
 		}
 	}
 
-	static Map<String, WikidataClassProperties> classes = new HashMap<>();
-	static Map<String, WikidataInstanceProperties> instances = new HashMap<>();
+	static Map<Integer, WikidataClassProperties> classes = new HashMap<>();
+	static Map<Integer, WikidataInstanceProperties> instances = new HashMap<>();
 
 	static OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream, rdfStream;
 
 	enum Operation {
-		READ_FROM_DUMP, ENHANCE_AND_FILTER, STRUCTURE_OUTPUT, EXPLORE_DATASET
+		READ_CLASSES, ENHANCE_AND_FILTER, READ_INSTANCES, STRUCTURE_OUTPUT, EXPLORE_DATASET
 	}
 
 	static Operation operation;

@@ -44,11 +44,11 @@ import static deepschema.Parameters.*;
 public class DumpOperations {
 
 	/**
-	 * Reads from Dump and applies RDFS rules for extraction.
+	 * Reads classes from dump.
 	 * 
 	 * @param ItemDocument
 	 */
-	public static void readFromDump(ItemDocument itemDocument) {
+	public static void readClasses(ItemDocument itemDocument) {
 
 		StatementGroup sg = null;
 
@@ -59,14 +59,17 @@ public class DumpOperations {
 			for (Statement s : sg.getStatements()) {
 				ItemIdValue value = (ItemIdValue) s.getValue();
 				if (value != null) {
-					if (!classes.containsKey(value.getId()))
-						classes.put(value.getId(), new WikidataClassProperties());
+					int wikidataClass = Integer.parseInt(value.getId().substring(1));
 
-					if (includeInstances) {
-						if (!instances.containsKey(sg.getSubject().getId()))
-							instances.put(sg.getSubject().getId(), new WikidataInstanceProperties());
+					if (!classes.containsKey(wikidataClass))
+						classes.put(wikidataClass, new WikidataClassProperties());
 
-						instances.get(sg.getSubject().getId()).instanceOf.add(value.getId());
+					if (wikidataClass == 5127848) {
+						int wikidataInstance = Integer.parseInt(sg.getSubject().getId().substring(1));
+
+						System.out.println(wikidataInstance);
+						if (!classes.containsKey(wikidataInstance))
+							classes.put(wikidataInstance, new WikidataClassProperties());
 					}
 				}
 			}
@@ -76,38 +79,32 @@ public class DumpOperations {
 		sg = itemDocument.findStatementGroup("P279");
 
 		if (sg != null) {
-			if (!classes.containsKey(sg.getSubject().getId()))
-				classes.put(sg.getSubject().getId(), new WikidataClassProperties());
+			int wikidataClass = Integer.parseInt(sg.getSubject().getId().substring(1));
+
+			if (!classes.containsKey(wikidataClass))
+				classes.put(wikidataClass, new WikidataClassProperties());
 
 			for (Statement s : sg.getStatements()) {
 				ItemIdValue value = (ItemIdValue) s.getValue();
 				if (value != null) {
-					if (!classes.containsKey(value.getId()))
-						classes.put(value.getId(), new WikidataClassProperties());
+					int wikidataSubClass = Integer.parseInt(value.getId().substring(1));
 
-					classes.get(sg.getSubject().getId()).subclassOf.add(value.getId());
+					if (!classes.containsKey(wikidataSubClass))
+						classes.put(wikidataSubClass, new WikidataClassProperties());
+
+					classes.get(wikidataClass).subclassOf.add(wikidataSubClass);
 				}
 			}
 		}
 	}
 
 	/**
-	 * Finds the labels of the classes and applies the filters.
+	 * Finds the English label of an entity.
 	 * 
 	 * @param ItemDocument
+	 * @return label
 	 */
-	public static void enhanceAndFilter(ItemDocument itemDocument) {
-		Boolean isClass = false, isInstance = false;
-		String currentId = itemDocument.getEntityId().getId();
-
-		if (classes.containsKey(currentId))
-			isClass = true;
-		else if (instances.containsKey(currentId))
-			isInstance = true;
-		else
-			return;
-
-		// Add english label.
+	public static String getLabel(ItemDocument itemDocument) {
 		String label = itemDocument.findLabel("en");
 		if (label == null || label.trim() == "")
 			label = itemDocument.findLabel("uk");
@@ -118,73 +115,112 @@ public class DumpOperations {
 		if (label == null || label.trim() == "")
 			label = itemDocument.findLabel("en-ca");
 
-		if (label == null || label.trim() == "") {
-			if (isClass)
-				classes.remove(currentId);
-			else if (isInstance)
-				instances.remove(currentId);
+		if (label == null || label.trim() == "")
+			label = null;
+		else
+			label = label.replace(separator, " ");
+
+		return label;
+	}
+
+	/**
+	 * Finds the labels of the classes and applies the filters.
+	 * 
+	 * @param ItemDocument
+	 */
+	public static void enhanceAndFilter(ItemDocument itemDocument) {
+		int wikidataClass = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
+
+		if (!classes.containsKey(wikidataClass))
+			return;
+
+		// Filter classes with no English label.
+		if ((classes.get(wikidataClass).label = getLabel(itemDocument)) == null) {
+			classes.remove(wikidataClass);
 			return;
 		}
-		label = label.replace(separator, " ");
 
-		if (isClass)
-			classes.get(currentId).label = label;
-		else if (isInstance)
-			instances.get(currentId).label = label;
-
-		if (isClass) {
-			// Filter category classes.
-			if (filterCategories) {
-				if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
-					classes.remove(currentId);
-					return;
-				}
+		// Filter category classes.
+		if (filterCategories) {
+			String label = classes.get(wikidataClass).label;
+			if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
+				classes.remove(wikidataClass);
+				return;
 			}
+		}
 
-			// Filter classes from Biological DBs.
-			if (filterBioDBs) {
-				for (StatementGroup sg : itemDocument.getStatementGroups()) {
-					for (Statement s : sg) {
-						for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
-							for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
-								Snak snak = sn.next();
-								if (snak.getValue() != null) {
-									String pid = snak.getPropertyId().getId();
-									String vid = snak.getValue().toString();
+		// Filter classes from Biological DBs.
+		if (filterBioDBs) {
+			for (StatementGroup sg : itemDocument.getStatementGroups()) {
+				for (Statement s : sg) {
+					for (Iterator<? extends Reference> it = s.getReferences().iterator(); it.hasNext();) {
+						for (Iterator<Snak> sn = it.next().getAllSnaks(); sn.hasNext();) {
+							Snak snak = sn.next();
+							if (snak.getValue() != null) {
+								String pid = snak.getPropertyId().getId();
+								String vid = snak.getValue().toString();
 
-									if (pid.equals("P143")) {
-										if (vid.contains("Q20641742") || // NCBI Gene
-										vid.contains("Q905695") || // UniProt
-										vid.contains("Q1344256") || // Ensembl
-										vid.contains("Q22230760") || // Ontology Lookup Service
-										vid.contains("Q1345229") || // Entrez
-										vid.contains("Q468215") || // HomoloGene
-										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-											classes.remove(currentId);
-											return;
-										}
+								if (pid.equals("P143")) {
+									if (vid.contains("Q20641742") || // NCBI Gene
+									vid.contains("Q905695") || // UniProt
+									vid.contains("Q1344256") || // Ensembl
+									vid.contains("Q22230760") || // Ontology Lookup Service
+									vid.contains("Q1345229") || // Entrez
+									vid.contains("Q468215") || // HomoloGene
+									vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
+										classes.remove(wikidataClass);
+										return;
 									}
+								}
 
-									if (pid.equals("P248")) {
-										if (vid.contains("Q20950174") || // NCBI homo sapiens annotation release 107
-										vid.contains("Q20973051") || // NCBI mus musculus annotation release 105
-										vid.contains("Q2629752") || // Swiss-Prot
-										vid.contains("Q905695") || // UniProt
-										vid.contains("Q20641742") || // NCBI Gene
-										vid.contains("Q21996330") || // Ensembl Release 83
-										vid.contains("Q135085") || // Gene Ontology
-										vid.contains("Q5282129") || // Disease Ontology
-										vid.contains("Q20976936") || // HomoloGene build68
-										vid.contains("Q17939676") || // NCBI Homo sapiens Annotation Release 106
-										vid.contains("Q21234191") || // NuDat
-										vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-											classes.remove(currentId);
-											return;
-										}
+								if (pid.equals("P248")) {
+									if (vid.contains("Q20950174") || // NCBI homo sapiens annotation release 107
+									vid.contains("Q20973051") || // NCBI mus musculus annotation release 105
+									vid.contains("Q2629752") || // Swiss-Prot
+									vid.contains("Q905695") || // UniProt
+									vid.contains("Q20641742") || // NCBI Gene
+									vid.contains("Q21996330") || // Ensembl Release 83
+									vid.contains("Q135085") || // Gene Ontology
+									vid.contains("Q5282129") || // Disease Ontology
+									vid.contains("Q20976936") || // HomoloGene build68
+									vid.contains("Q17939676") || // NCBI Homo sapiens Annotation Release 106
+									vid.contains("Q21234191") || // NuDat
+									vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
+										classes.remove(wikidataClass);
+										return;
 									}
 								}
 							}
 						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Reads Instances from dump.
+	 * 
+	 * @param ItemDocument
+	 */
+	public static void readInstances(ItemDocument itemDocument) {
+
+		// relation(I, C) /\ Class(C) => instanceOf(I, C) #empirical rule
+		int wikidataInstance = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
+
+		for (StatementGroup sg : itemDocument.getStatementGroups()) {
+			for (Statement s : sg) {
+				Value value = s.getValue();
+
+				if (value instanceof ItemIdValue && value != null) {
+					int wikidataClass = Integer.parseInt(((ItemIdValue) value).getId().substring(1));
+
+					if (classes.containsKey(wikidataClass)) {
+						if (!instances.containsKey(wikidataInstance))
+							instances.put(wikidataInstance, new WikidataInstanceProperties());
+
+						System.out.println(wikidataInstance + " " + wikidataClass);
+						instances.get(wikidataInstance).instanceOf.add(wikidataClass);
 					}
 				}
 			}
@@ -197,7 +233,7 @@ public class DumpOperations {
 	 * @param ItemDocument
 	 */
 	public static void structureOutput(ItemDocument itemDocument) {
-		if (classes.containsKey(itemDocument.getEntityId().getId()))
+		if (classes.containsKey(Integer.parseInt(itemDocument.getEntityId().getId().substring(1))))
 			if (output == Output.JSON)
 				jsonSerializer.processItemDocument(datamodelConverter.copy(itemDocument));
 			else if (output == Output.RDF)
@@ -214,7 +250,7 @@ public class DumpOperations {
 		final String operation = "inspectProvenance";
 
 		if (operation.equals("inspectProvenance")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
+			if (classes.containsKey(Integer.parseInt(itemDocument.getEntityId().getId().substring(1)))) {
 
 				try {
 					Boolean foundProvenance = false;
@@ -275,10 +311,8 @@ public class DumpOperations {
 						}
 					}
 
-					if (!foundProvenance) {
+					if (!foundProvenance)
 						txtStream.write(("other \n").getBytes());
-						System.out.println(itemDocument.getEntityId());
-					}
 				}
 				catch (IOException e) {
 					e.printStackTrace();
@@ -286,7 +320,7 @@ public class DumpOperations {
 			}
 		}
 		else if (operation.equals("inspectLanguages1")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
+			if (classes.containsKey(Integer.parseInt(itemDocument.getEntityId().getId().substring(1)))) {
 
 				for (Iterator<String> it = itemDocument.getLabels().keySet().iterator(); it.hasNext();) {
 					try {
@@ -299,10 +333,12 @@ public class DumpOperations {
 			}
 		}
 		else if (operation.equals("inspectLanguages2")) {
-			if (classes.containsKey(itemDocument.getEntityId().getId())) {
+			int wikidataClass = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
+
+			if (classes.containsKey(wikidataClass)) {
 
 				try {
-					txtStream.write((classes.get(itemDocument.getEntityId().getId()).label + "\t" + itemDocument.getLabels().size() + "\n").getBytes());
+					txtStream.write((classes.get(wikidataClass).label + "\t" + itemDocument.getLabels().size() + "\n").getBytes());
 				}
 				catch (IOException e) {
 					e.printStackTrace();

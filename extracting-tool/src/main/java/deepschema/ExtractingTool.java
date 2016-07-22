@@ -34,8 +34,9 @@ import static deepschema.Parameters.useCache;
 import static deepschema.DumpOperations.enhanceAndFilter;
 import static deepschema.DumpOperations.exploreDataset;
 import static deepschema.DumpOperations.processEntitiesFromWikidataDump;
-import static deepschema.DumpOperations.readFromDump;
+import static deepschema.DumpOperations.readClasses;
 import static deepschema.DumpOperations.structureOutput;
+import static deepschema.DumpOperations.readInstances;
 
 import java.io.BufferedOutputStream;
 import java.io.FileInputStream;
@@ -164,10 +165,14 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			extractingTool.writeOutput();
 		}
 		else {
-			operation = Operation.READ_FROM_DUMP;
+			operation = Operation.READ_CLASSES;
 			processEntitiesFromWikidataDump(extractingTool);
 			operation = Operation.ENHANCE_AND_FILTER;
 			processEntitiesFromWikidataDump(extractingTool);
+			if(includeInstances) {
+				operation = Operation.READ_INSTANCES;
+				processEntitiesFromWikidataDump(extractingTool);				
+			}
 			extractingTool.writeOutput();
 			extractingTool.cache("write");
 		}
@@ -201,20 +206,20 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	void writeOutput() {
 		try {
 			if (output == Output.TSV) {
-				for (Entry<String, WikidataClassProperties> entry : classes.entrySet())
-					classesStream.write((entry.getKey().substring(1) + separator + entry.getValue().label + "\n").getBytes());
+				for (Entry<Integer, WikidataClassProperties> entry : classes.entrySet())
+					classesStream.write((entry.getKey() + separator + entry.getValue().label + "\n").getBytes());
 
-				for (Entry<String, WikidataClassProperties> entry : classes.entrySet())
-					for (String value : entry.getValue().subclassOf)
-						subclassOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
+				for (Entry<Integer, WikidataClassProperties> entry : classes.entrySet())
+					for (int value : entry.getValue().subclassOf)
+						subclassOfRelationsStream.write((entry.getKey() + separator + value + "\n").getBytes());
 
 				if (includeInstances) {
-					for (Entry<String, WikidataInstanceProperties> entry : instances.entrySet())
-						instancesStream.write((entry.getKey().substring(1) + separator + entry.getValue().label + "\n").getBytes());
+					for (Entry<Integer, WikidataInstanceProperties> entry : instances.entrySet())
+						instancesStream.write((entry.getKey() + separator + entry.getValue().label + "\n").getBytes());
 
-					for (Entry<String, WikidataInstanceProperties> entry : instances.entrySet())
-						for (String value : entry.getValue().instanceOf)
-							instanceOfRelationsStream.write((entry.getKey().substring(1) + separator + value.substring(1) + "\n").getBytes());
+					for (Entry<Integer, WikidataInstanceProperties> entry : instances.entrySet())
+						for (int value : entry.getValue().instanceOf)
+							instanceOfRelationsStream.write((entry.getKey() + separator + value + "\n").getBytes());
 				}
 				classesStream.close();
 				subclassOfRelationsStream.close();
@@ -257,8 +262,8 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			switch (action) {
 				case "read": {
 					ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(cacheFile));
-					classes = (Map<String, WikidataClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
-					instances = (Map<String, WikidataInstanceProperties>) ((ObjectInputStream) objectInputStream).readObject();
+					classes = (Map<Integer, WikidataClassProperties>) ((ObjectInputStream) objectInputStream).readObject();
+					instances = (Map<Integer, WikidataInstanceProperties>) ((ObjectInputStream) objectInputStream).readObject();
 					objectInputStream.close();
 				}
 				case "write": {
@@ -278,12 +283,15 @@ public class ExtractingTool implements EntityDocumentProcessor {
 
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
-		if (operation == Operation.READ_FROM_DUMP) {
-			readFromDump(itemDocument);
+		if (operation == Operation.READ_CLASSES) {
+			readClasses(itemDocument);
 		}
 		else if (operation == Operation.ENHANCE_AND_FILTER) {
 			enhanceAndFilter(itemDocument);
 		}
+		else if (operation == Operation.READ_INSTANCES) {
+			readInstances(itemDocument);
+		}		
 		else if (operation == Operation.STRUCTURE_OUTPUT) {
 			structureOutput(itemDocument);
 		}
