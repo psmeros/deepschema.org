@@ -55,7 +55,7 @@ public class Parameters {
 
 	static final Boolean filterBioDBs = true;
 
-	static final Boolean includeInstances = true;
+	static final Boolean includeInstances = false;
 
 	/******************************************************************************************/
 
@@ -68,7 +68,10 @@ public class Parameters {
 		Set<Integer> subclassOf;
 
 		public WikidataClassProperties() {
-			this.label = "";
+			this.subclassOf = new HashSet<Integer>();
+		}
+		public WikidataClassProperties(String label) {
+			this.label = label;
 			this.subclassOf = new HashSet<Integer>();
 		}
 	}
@@ -80,9 +83,12 @@ public class Parameters {
 		Set<Integer> instanceOf;
 
 		public WikidataInstanceProperties() {
-			this.label = "";
 			this.instanceOf = new HashSet<Integer>();
 		}
+		public WikidataInstanceProperties(String label) {
+			this.label = label;
+			this.instanceOf = new HashSet<Integer>();
+		}		
 	}
 
 	static Map<Integer, WikidataClassProperties> classes = new HashMap<>();
@@ -91,7 +97,7 @@ public class Parameters {
 	static OutputStream classesStream, subclassOfRelationsStream, instancesStream, instanceOfRelationsStream, jsonStream, txtStream, rdfStream;
 
 	enum Operation {
-		READ_CLASSES, ENHANCE_AND_FILTER, READ_INSTANCES, STRUCTURE_OUTPUT, EXPLORE_DATASET
+		READ_CLASSES, ENHANCE_AND_FILTER, STRUCTURE_OUTPUT, EXPLORE_DATASET
 	}
 
 	static Operation operation;

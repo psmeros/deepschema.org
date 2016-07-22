@@ -34,9 +34,8 @@ import static deepschema.Parameters.useCache;
 import static deepschema.DumpOperations.enhanceAndFilter;
 import static deepschema.DumpOperations.exploreDataset;
 import static deepschema.DumpOperations.processEntitiesFromWikidataDump;
-import static deepschema.DumpOperations.readClasses;
+import static deepschema.DumpOperations.readDump;
 import static deepschema.DumpOperations.structureOutput;
-import static deepschema.DumpOperations.readInstances;
 
 import java.io.BufferedOutputStream;
 import java.io.FileInputStream;
@@ -169,10 +168,6 @@ public class ExtractingTool implements EntityDocumentProcessor {
 			processEntitiesFromWikidataDump(extractingTool);
 			operation = Operation.ENHANCE_AND_FILTER;
 			processEntitiesFromWikidataDump(extractingTool);
-			if(includeInstances) {
-				operation = Operation.READ_INSTANCES;
-				processEntitiesFromWikidataDump(extractingTool);				
-			}
 			extractingTool.writeOutput();
 			extractingTool.cache("write");
 		}
@@ -284,14 +279,11 @@ public class ExtractingTool implements EntityDocumentProcessor {
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
 		if (operation == Operation.READ_CLASSES) {
-			readClasses(itemDocument);
+			readDump(itemDocument);
 		}
 		else if (operation == Operation.ENHANCE_AND_FILTER) {
 			enhanceAndFilter(itemDocument);
 		}
-		else if (operation == Operation.READ_INSTANCES) {
-			readInstances(itemDocument);
-		}		
 		else if (operation == Operation.STRUCTURE_OUTPUT) {
 			structureOutput(itemDocument);
 		}

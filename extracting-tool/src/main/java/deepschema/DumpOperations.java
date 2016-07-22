@@ -44,45 +44,21 @@ import static deepschema.Parameters.*;
 public class DumpOperations {
 
 	/**
-	 * Reads classes from dump.
+	 * Reads classes from dump. The enhancement/filtering of the classes/instances is pushed to this pass of the dump (wherever this is possible).
 	 * 
 	 * @param ItemDocument
 	 */
-	public static void readClasses(ItemDocument itemDocument) {
+	public static void readDump(ItemDocument itemDocument) {
 
 		StatementGroup sg = null;
 
-		// instanceOf(I, C) => Class(C) #RDFS
-		sg = itemDocument.findStatementGroup("P31");
-
-		if (sg != null) {
-			for (Statement s : sg.getStatements()) {
-				ItemIdValue value = (ItemIdValue) s.getValue();
-				if (value != null) {
-					int wikidataClass = Integer.parseInt(value.getId().substring(1));
-
-					if (!classes.containsKey(wikidataClass))
-						classes.put(wikidataClass, new WikidataClassProperties());
-
-					if (wikidataClass == 5127848) {
-						int wikidataInstance = Integer.parseInt(sg.getSubject().getId().substring(1));
-
-						System.out.println(wikidataInstance);
-						if (!classes.containsKey(wikidataInstance))
-							classes.put(wikidataInstance, new WikidataClassProperties());
-					}
-				}
-			}
-		}
-
 		// subclassOf(C1, C2) => Class(C1) /\ Class(C2) #RDFS
-		sg = itemDocument.findStatementGroup("P279");
+		if ((sg = itemDocument.findStatementGroup("P279")) != null && !filter(itemDocument)) {
 
-		if (sg != null) {
 			int wikidataClass = Integer.parseInt(sg.getSubject().getId().substring(1));
 
-			if (!classes.containsKey(wikidataClass))
-				classes.put(wikidataClass, new WikidataClassProperties());
+			// No need to check if the class already exists in the map because we read one entity at the time and there are no duplicates.
+			classes.put(wikidataClass, new WikidataClassProperties(getLabel(itemDocument)));
 
 			for (Statement s : sg.getStatements()) {
 				ItemIdValue value = (ItemIdValue) s.getValue();
@@ -93,6 +69,29 @@ public class DumpOperations {
 						classes.put(wikidataSubClass, new WikidataClassProperties());
 
 					classes.get(wikidataClass).subclassOf.add(wikidataSubClass);
+				}
+			}
+		}
+
+		// instanceOf(I, C) => Class(C) #RDFS
+		if ((sg = itemDocument.findStatementGroup("P31")) != null && !filter(itemDocument)) {
+
+			int wikidataInstance = Integer.parseInt(sg.getSubject().getId().substring(1));
+
+			// No need to check if the instance already exists in the map because we read one entity at the time and there are no duplicates.
+			if (includeInstances)
+				instances.put(wikidataInstance, new WikidataInstanceProperties(getLabel(itemDocument)));
+
+			for (Statement s : sg.getStatements()) {
+				ItemIdValue value = (ItemIdValue) s.getValue();
+				if (value != null) {
+					int wikidataClass = Integer.parseInt(value.getId().substring(1));
+
+					if (!classes.containsKey(wikidataClass))
+						classes.put(wikidataClass, new WikidataClassProperties());
+
+					if (includeInstances)
+						instances.get(wikidataInstance).instanceOf.add(wikidataClass);
 				}
 			}
 		}
@@ -124,30 +123,21 @@ public class DumpOperations {
 	}
 
 	/**
-	 * Finds the labels of the classes and applies the filters.
+	 * Finds the labels of the entities and applies the filters.
 	 * 
 	 * @param ItemDocument
 	 */
-	public static void enhanceAndFilter(ItemDocument itemDocument) {
-		int wikidataClass = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
+	public static Boolean filter(ItemDocument itemDocument) {
 
-		if (!classes.containsKey(wikidataClass))
-			return;
+		String label = getLabel(itemDocument);
 
 		// Filter classes with no English label.
-		if ((classes.get(wikidataClass).label = getLabel(itemDocument)) == null) {
-			classes.remove(wikidataClass);
-			return;
-		}
+		if (label == null)
+			return true;
 
 		// Filter category classes.
-		if (filterCategories) {
-			String label = classes.get(wikidataClass).label;
-			if ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")) {
-				classes.remove(wikidataClass);
-				return;
-			}
-		}
+		if (filterCategories && ((label.startsWith("Cat") || label.startsWith("Кат")) && label.contains(":")))
+			return true;
 
 		// Filter classes from Biological DBs.
 		if (filterBioDBs) {
@@ -168,8 +158,7 @@ public class DumpOperations {
 									vid.contains("Q1345229") || // Entrez
 									vid.contains("Q468215") || // HomoloGene
 									vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-										classes.remove(wikidataClass);
-										return;
+										return true;
 									}
 								}
 
@@ -186,8 +175,7 @@ public class DumpOperations {
 									vid.contains("Q17939676") || // NCBI Homo sapiens Annotation Release 106
 									vid.contains("Q21234191") || // NuDat
 									vid.contains("Q13651104") || vid.contains("Q15221937") || vid.contains("Q18000294") || vid.contains("Q1936589") || vid.contains("Q19315626")) { // minerals
-										classes.remove(wikidataClass);
-										return;
+										return true;
 									}
 								}
 							}
@@ -196,35 +184,24 @@ public class DumpOperations {
 				}
 			}
 		}
+		return false;
 	}
 
 	/**
-	 * Reads Instances from dump.
+	 * Finds the labels of the classes and applies the filters. This second pass is only for the classes that have not been enhanced/filter yet.
 	 * 
 	 * @param ItemDocument
 	 */
-	public static void readInstances(ItemDocument itemDocument) {
+	public static void enhanceAndFilter(ItemDocument itemDocument) {
+		int wikidataClass = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
 
-		// relation(I, C) /\ Class(C) => instanceOf(I, C) #empirical rule
-		int wikidataInstance = Integer.parseInt(itemDocument.getEntityId().getId().substring(1));
+		if (!classes.containsKey(wikidataClass) || classes.get(wikidataClass).label != null)
+			return;
 
-		for (StatementGroup sg : itemDocument.getStatementGroups()) {
-			for (Statement s : sg) {
-				Value value = s.getValue();
-
-				if (value instanceof ItemIdValue && value != null) {
-					int wikidataClass = Integer.parseInt(((ItemIdValue) value).getId().substring(1));
-
-					if (classes.containsKey(wikidataClass)) {
-						if (!instances.containsKey(wikidataInstance))
-							instances.put(wikidataInstance, new WikidataInstanceProperties());
-
-						System.out.println(wikidataInstance + " " + wikidataClass);
-						instances.get(wikidataInstance).instanceOf.add(wikidataClass);
-					}
-				}
-			}
-		}
+		if (filter(itemDocument))
+			classes.remove(wikidataClass);
+		else
+			classes.get(wikidataClass).label = getLabel(itemDocument);
 	}
 
 	/**
