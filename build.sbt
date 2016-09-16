@@ -32,9 +32,12 @@ lazy val processing = (project in file("processing-tool"))
 	libraryDependencies += "org.apache.spark" %% "spark-graphx" % "1.6.0"
 	)
 
+lazy val gluing = (project in file("gluing-tool"))
+.settings(commonSettings: _*)
+.settings(name := "gluing tool")
 
 
 lazy val root = (project in file("."))
-  .aggregate(extracting, processing)
+  .aggregate(extracting, processing, gluing)
   .settings(commonSettings: _*)
 
