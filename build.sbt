@@ -36,8 +36,21 @@ lazy val gluing = (project in file("gluing-tool"))
 .settings(commonSettings: _*)
 .settings(name := "gluing tool")
 
+lazy val crowdsourcing = (project in file("crowdsourcing-tool"))
+.settings(commonSettings: _*)
+.settings(
+	name := "crowdsourcing tool",
 
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-datamodel" % "0.6.0",
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-dumpfiles" % "0.6.0",
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-rdf" % "0.6.0",
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-util" % "0.6.0",
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-wikibaseapi" % "0.6.0",
+    libraryDependencies += "org.wikidata.wdtk" % "wdtk-storage" % "0.6.0",
+    libraryDependencies += "org.slf4j" % "slf4j-log4j12" % "1.7.10"
+  )
+  
 lazy val root = (project in file("."))
-  .aggregate(extracting, processing, gluing)
+  .aggregate(extracting, processing, gluing, crowdsourcing)
   .settings(commonSettings: _*)
 
