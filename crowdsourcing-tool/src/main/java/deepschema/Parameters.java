@@ -34,7 +34,7 @@ public class Parameters {
 	 * if the dump file would have ended there. This is useful for testing (and in particular better than just aborting the program) since it allows for final
 	 * processing and proper closing to happen without having to wait for a whole dump file to process.
 	 */
-	static final int TIMEOUT_SEC = 0;
+	static final int TIMEOUT_SEC = 20;
 
 	/**
 	 * If set to true, all example programs will run in offline mode. Only data dumps that have been downloaded in previous runs will be used.

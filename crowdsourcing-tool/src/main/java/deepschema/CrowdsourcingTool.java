@@ -85,6 +85,7 @@ public class CrowdsourcingTool implements EntityDocumentProcessor {
 		}
 		else {
 			readGluing();
+			getSchemaInfo();
 			processEntitiesFromWikidataDump(crowdsourcingTool);
 			crowdsourcingTool.writeOutput();
 			crowdsourcingTool.cache("write");
@@ -118,10 +119,21 @@ public class CrowdsourcingTool implements EntityDocumentProcessor {
 	 */
 	void writeOutput() {
 		try {
-				//for (Entry<Integer, WikidataClassProperties> entry : classes.entrySet())
-				//	outputStream.write((entry.getKey() + separator + entry.getValue().label + "\n").getBytes());
-				
-				outputStream.close();
+
+			outputStream.write(("WikidataLabel" + separator + "SchemaLabel" + separator + "WikidataDescription" + separator + "SchemaDescription" + separator + "WikidataURL" + separator + "SchemaURL" + separator + "relation" + "\n").getBytes());
+
+			for (int index = 0; index < crowdsourcingInfoList.size(); index++) {
+
+				CrowdsourcingInfo crowdsourcingInfo = crowdsourcingInfoList.get(index);
+
+				// TODO:remove
+				if (crowdsourcingInfo.WikidataLabel == null)
+					continue;
+
+				outputStream.write((crowdsourcingInfo.WikidataLabel + separator + crowdsourcingInfo.SchemaLabel + separator + crowdsourcingInfo.WikidataDescription + separator + crowdsourcingInfo.SchemaDescription + separator + crowdsourcingInfo.WikidataURL + separator + crowdsourcingInfo.SchemaURL + separator + crowdsourcingInfo.relation + "\n").getBytes());
+			}
+
+			outputStream.close();
 		}
 		catch (IOException e) {
 			e.printStackTrace();
@@ -159,7 +171,7 @@ public class CrowdsourcingTool implements EntityDocumentProcessor {
 
 	@Override
 	public void processItemDocument(ItemDocument itemDocument) {
-		getCrowdsourcingInfo(itemDocument);
+		getWikidataInfo(itemDocument);
 	}
 
 	@Override
