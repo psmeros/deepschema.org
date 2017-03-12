@@ -1,0 +1,78 @@
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<link rel="stylesheet" type="text/css" href="css/style.css">
+
+<link rel="stylesheet" href="css/font-awesome.min.css">
+
+<link rel="icon" href="img/logo.png" type="image/x-icon" />
+
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+
+<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r" crossorigin="anonymous">
+
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
+
+<title>deepschema.org</title> 
+<meta content="deepschema.org, Wikidata, schema.org, taxonomy, ontology" name="keywords" lang="en"> 
+
+</head>
+<body>
+	<div class="container" style="max-width: 700px;">
+		<div class="row row-cust" style="margin-top: 60px;">
+			<div class="col-xs-2">
+		            <img class="img-responsive" src="img/logo.png" height="10px"></img>
+			</div>
+			<div class="col-xs-9">
+		            <h1>deepschema.org: An Ontology for Typing Entities in the Web of Data</h1>
+					<h5><a href="http://panayiotis.smeros.info">Panayiotis Smeros</a>, <a href="https://www.linkedin.com/in/amitgupta151">Amit Gupta</a>, <a href="http://fooshed.net">Michele Catasta</a>, <a href="http://lsir.epfl.ch/aberer/">Karl Aberer</a></h5>
+		    </div>
+		</div>
+
+		<div class="row row-cust">
+	        <div class="center-block">        	
+	        	<h4 align="center">One ontology to type them all!</h4>
+        	</div>
+			
+			<h2>Introduction</h2>
+			<p>Discovering the appropriate type of an entity in the Web of Data is still considered an open challenge, given the complexity of the many tasks it entails.
+			Among them, the most notable is the definition of a generic and cross-domain ontology.
+			While the ontologies proposed in the past function mostly as schemata for knowledge bases of different sizes, an ontology for entity typing requires a rich, accurate and easily-traversable type hierarchy.
+			Likewise, it is desirable that the hierarchy contains thousands of nodes and multiple levels, contrary to what a manually curated ontology can offer.
+			Such level of detail is required to describe all the possible environments in which an entity exists in.
+			Furthermore, the generation of the ontology must follow an automated fashion, combining the most widely used data sources and following the speed of the Web.</p>
+			<p>deepschema.org is the first ontology that combines two well-known ontological resources, Wikidata and schema.org, to obtain a highly-accurate, generic type ontology which is at the same time a first-class citizen in the Web of Data.</p>
+		
+
+			<br>
+			If you want to know more:
+		    <a class="btn btn-lg" href="files/ldow2017.pdf" style="text-align:center;display:block;">
+			  <i class="fa fa-file-o"></i>&nbsp;&nbsp;Read the LDOW2017 paper describing our approach</a>
+			<a href="files/ldow2017.pdf">
+			<img src="img/first-page.png" class="centered-image" style="width: 300px;"></img>
+			</a>
+			
+		    <a class="btn btn-lg" href="files/ldow2017-slides.pdf" style="text-align:center;display:block;">
+			  <i class="fa fa-microphone"></i>&nbsp;&nbsp;View the slides from our talk at LDOW2017</a>
+			<a href="files/ldow2017-slides.pdf">
+			<img src="img/first-slide.png" class="centered-image" style="width: 300px;"></img>
+			</a>
+			
+			<h2>Useful Resources</h2>
+				<p class="btn btn-lg"><i class="fa fa-database"></i>&nbsp;&nbsp;Wikidata Taxonomy [<a href="files/wikidataTaxonomy.json.bz2">json</a> (recommended), <a href="files/wikidataTaxonomy.nt.bz2">nt</a>]</p>
+				<p class="btn btn-lg"><i class="fa fa-database"></i>&nbsp;&nbsp;Integration layer for similarity threshold <a href=files/gluing_thr_0.5.nt.bz2>0.5</a>, <a href=files/gluing_thr_0.6.nt.bz2>0.6</a>, <a href=files/gluing_thr_0.7.nt.bz2>0.7</a>, <a href=files/gluing_thr_0.8.nt.bz2>0.8</a> and <a href=files/gluing_thr_0.9.nt.bz2>0.9</a></p>
+				<p class="btn btn-lg"><i class="fa fa-database"></i>&nbsp;&nbsp;Full Ontology [<a href="files/deepschemaOntology.json.bz2">json</a> (recommended), <a href="files/deepschemaOntology.nt.bz2">nt</a>]</p>
+
+				<!-- <p>These files were produced using the deepschema.org toolkit to which we gave as input i) the Wikidata 20160208 JSON dump and ii) the schema.org 2.2 release.</p> -->
+		</div>
+		
+					<div class="row footer">
+							Copyright © <a href='http://epfl.ch'>EPFL</a> (since 2017). Credits to <a href='http://getbootstrap.com'>Bootstrap</a> and <a href='http://logomakr.com'>Logomakr</a> for this page.
+						<!-- /col-lg-4 -->
+					</div>
+
+	</div>
+
+</body>

@@ -1,0 +1,48 @@
+.row-cust {
+	border-left: 1px solid #ccc;
+	padding-left: 40px;
+	padding-bottom: 50px;
+}
+
+.icon-cust {
+	color: #D55351;
+}
+
+h1 {
+	font-size: 20px !important;
+	color: #555 !important;
+}
+
+h2 {
+  padding-top: 20px;
+	font-size: 24px !important;
+	color: #999 !important;
+}
+
+.top-image{
+	margin-left: -60px;
+}
+
+.centered-image{
+  display: block;
+	margin-left: auto;
+  margin-right: auto;
+}
+
+.footer {
+  border-left: 1px solid #ccc;
+  background-color: #fff;
+  padding-left: 40px;
+  padding-top: 50px;
+  padding-bottom: 50px; 
+}
+
+#footer p {
+  color: white;
+}
+
+#footer h4 {
+  color: white;
+  text-transform: uppercase;
+  padding-bottom: 20px;
+}
