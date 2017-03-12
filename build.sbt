@@ -32,9 +32,9 @@ lazy val processing = (project in file("processing-tool"))
 	libraryDependencies += "org.apache.spark" %% "spark-graphx" % "1.6.0"
 	)
 
-lazy val gluing = (project in file("gluing-tool"))
+lazy val integration = (project in file("integration-tool"))
 .settings(commonSettings: _*)
-.settings(name := "gluing tool")
+.settings(name := "integration tool")
 
 lazy val crowdsourcing = (project in file("crowdsourcing-tool"))
 .settings(commonSettings: _*)
@@ -51,6 +51,6 @@ lazy val crowdsourcing = (project in file("crowdsourcing-tool"))
   )
   
 lazy val root = (project in file("."))
-  .aggregate(extracting, processing, gluing, crowdsourcing)
+  .aggregate(extracting, processing, integration, crowdsourcing)
   .settings(commonSettings: _*)
 
